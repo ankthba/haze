@@ -5,9 +5,12 @@
 //  A forecast "radar" built from Open-Meteo. Observed radar tiles (RainViewer
 //  etc.) only cover the recent past + a ~30-minute nowcast, so they can't show
 //  where rain is headed over the next several hours. Instead we sample hourly
-//  precipitation across a grid of points around the location in a single request
-//  and render each hour as a heatmap — a loop that runs from ~1 hour ago to
-//  ~12 hours ahead.
+//  precipitation across a dense grid of points around the location and render
+//  each hour as a smooth heatmap — a loop running from ~1 hour ago to ~12 hours
+//  ahead.
+//
+//  Open-Meteo caps request-URL length (a few hundred points), so the grid is
+//  fetched in a few concurrent chunks and reassembled in order.
 //
 
 import Foundation
@@ -43,10 +46,12 @@ struct RadarField {
 
 struct OpenMeteoRadarService {
     /// Grid resolution (points per side) and half-width of the sampled box (deg).
-    static let grid = 16
-    static let halfSpan: CLLocationDegrees = 3.0
+    static let grid = 24
+    static let halfSpan: CLLocationDegrees = 2.5
     static let pastHours = 1
     static let forecastHours = 12
+    /// Max points per request — Open-Meteo rejects very long URLs (~8k chars).
+    static let maxPerRequest = 180
 
     enum RadarError: Error { case badResponse, noData }
 
@@ -68,6 +73,48 @@ struct OpenMeteoRadarService {
             }
         }
 
+        // Fetch the grid in concurrent chunks, then reassemble in order.
+        let n = g * g
+        var ranges: [Range<Int>] = []
+        var s = 0
+        while s < n { ranges.append(s..<min(s + Self.maxPerRequest, n)); s += Self.maxPerRequest }
+
+        var chunks = [[PointResponse]](repeating: [], count: ranges.count)
+        try await withThrowingTaskGroup(of: (Int, [PointResponse]).self) { group in
+            for (ci, r) in ranges.enumerated() {
+                let la = Array(lats[r]), lo = Array(lons[r])
+                group.addTask { (ci, try await self.fetchChunk(lats: la, lons: lo)) }
+            }
+            for try await (ci, res) in group { chunks[ci] = res }
+        }
+        let points = chunks.flatMap { $0 }
+        guard points.count == n, let first = points.first else { throw RadarError.noData }
+
+        // All points share one time axis; parse it once and pick the window.
+        let formatter = Self.makeFormatter()
+        let times = first.hourly.time.map { formatter.date(from: $0) ?? Date(timeIntervalSince1970: 0) }
+        let now = Date()
+        let lower = now.addingTimeInterval(-Double(Self.pastHours) * 3600 - 1800)
+        let upper = now.addingTimeInterval(Double(Self.forecastHours) * 3600 + 1800)
+        let window = times.indices.filter { times[$0] >= lower && times[$0] <= upper }
+        guard !window.isEmpty else { throw RadarError.noData }
+
+        var frames: [RadarFrame] = []
+        frames.reserveCapacity(window.count)
+        for k in window {
+            let t = times[k]
+            var values = [Double](repeating: 0, count: n)
+            for p in 0..<n {
+                let arr = points[p].hourly.precipitation
+                values[p] = (k < arr.count ? arr[k] : nil).flatMap { $0 } ?? 0
+            }
+            frames.append(RadarFrame(time: t, isForecast: t > now, values: values))
+        }
+
+        return RadarField(center: center, halfSpan: h, cols: g, rows: g, frames: frames)
+    }
+
+    private func fetchChunk(lats: [String], lons: [String]) async throws -> [PointResponse] {
         var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         comps.queryItems = [
             .init(name: "latitude", value: lats.joined(separator: ",")),
@@ -86,31 +133,7 @@ struct OpenMeteoRadarService {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw RadarError.badResponse
         }
-        let points = try JSONDecoder().decode([PointResponse].self, from: data)
-        guard points.count == g * g, let first = points.first else { throw RadarError.noData }
-
-        // All points share one time axis; parse it once and pick the window.
-        let formatter = Self.makeFormatter()
-        let times = first.hourly.time.map { formatter.date(from: $0) ?? Date(timeIntervalSince1970: 0) }
-        let now = Date()
-        let lower = now.addingTimeInterval(-Double(Self.pastHours) * 3600 - 1800)
-        let upper = now.addingTimeInterval(Double(Self.forecastHours) * 3600 + 1800)
-        let window = times.indices.filter { times[$0] >= lower && times[$0] <= upper }
-        guard !window.isEmpty else { throw RadarError.noData }
-
-        var frames: [RadarFrame] = []
-        frames.reserveCapacity(window.count)
-        for k in window {
-            let t = times[k]
-            var values = [Double](repeating: 0, count: g * g)
-            for p in 0..<(g * g) {
-                let arr = points[p].hourly.precipitation
-                values[p] = (k < arr.count ? arr[k] : nil).flatMap { $0 } ?? 0
-            }
-            frames.append(RadarFrame(time: t, isForecast: t > now, values: values))
-        }
-
-        return RadarField(center: center, halfSpan: h, cols: g, rows: g, frames: frames)
+        return try JSONDecoder().decode([PointResponse].self, from: data)
     }
 
     private func clampLat(_ v: Double) -> Double { min(max(v, -89), 89) }
