@@ -12,6 +12,7 @@ struct WeatherScreen: View {
     @Bindable var viewModel: WeatherViewModel
     @Binding var showSearch: Bool
     @Binding var showSettings: Bool
+    @Binding var showRadar: Bool
 
     @State private var selectedDay: DayForecast?
     @State private var topBarOpacity: Double = 1
@@ -51,6 +52,9 @@ struct WeatherScreen: View {
                     }
                     DailyForecastCard(bundle: bundle, accent: condition.accent) { day in
                         selectedDay = day
+                    }
+                    RadarPreviewCard(place: bundle.place, accent: condition.accent) {
+                        showRadar = true
                     }
                     DetailsSection(bundle: bundle,
                                    unit: viewModel.temperatureUnit,
@@ -119,6 +123,16 @@ struct WeatherScreen: View {
             .buttonStyle(CardButtonStyle())
 
             Spacer()
+
+            Button {
+                showRadar = true
+            } label: {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(CardButtonStyle())
+            .accessibilityLabel("Precipitation radar")
 
             Button {
                 showSettings = true

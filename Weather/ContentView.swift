@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var viewModel = WeatherViewModel()
     @State private var showSearch = false
     @State private var showSettings = false
+    @State private var showRadar = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -35,7 +36,8 @@ struct ContentView: View {
                     WeatherScreen(bundle: bundle,
                                   viewModel: viewModel,
                                   showSearch: $showSearch,
-                                  showSettings: $showSettings)
+                                  showSettings: $showSettings,
+                                  showRadar: $showRadar)
                     .transition(.opacity)
                 } else {
                     LoadingView()
@@ -65,6 +67,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
+        }
+        .fullScreenCover(isPresented: $showRadar) {
+            if let bundle = viewModel.bundle {
+                RadarView(place: bundle.place,
+                          timezone: bundle.timezone,
+                          accent: bundle.current.condition.accent)
+            }
         }
     }
 }
