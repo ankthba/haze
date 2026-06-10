@@ -37,8 +37,13 @@ struct RadarMapView: UIViewRepresentable {
         config.pointOfInterestFilter = .excludingAll
         map.preferredConfiguration = config
 
+        // Lock the camera: the radar data only covers a fixed box and a limited
+        // set of zoom levels, so free pan/zoom would scroll off into emptiness
+        // and trigger "unsupported zoom" tile errors. A fixed frame just works.
         map.isRotateEnabled = false
         map.isPitchEnabled = false
+        map.isZoomEnabled = false
+        map.isScrollEnabled = false
         map.showsCompass = false
         map.showsScale = false
         map.showsUserLocation = false
@@ -113,6 +118,10 @@ struct RadarMapView: UIViewRepresentable {
             let overlay = MKTileOverlay(urlTemplate: template)
             overlay.canReplaceMapContent = false
             overlay.tileSize = CGSize(width: 256, height: 256)
+            // RainViewer serves a limited zoom range; clamp so MapKit scales the
+            // nearest level instead of requesting unsupported tiles (404s).
+            overlay.minimumZ = 1
+            overlay.maximumZ = 10
             map.addOverlay(overlay, level: .aboveLabels)
             tileQueue.append(overlay)
             while tileQueue.count > 2 { map.removeOverlay(tileQueue.removeFirst()) }
