@@ -1,0 +1,138 @@
+//
+//  OpenMeteoRadarService.swift
+//  Weather
+//
+//  A forecast "radar" built from Open-Meteo. Observed radar tiles (RainViewer
+//  etc.) only cover the recent past + a ~30-minute nowcast, so they can't show
+//  where rain is headed over the next several hours. Instead we sample hourly
+//  precipitation across a grid of points around the location in a single request
+//  and render each hour as a heatmap — a loop that runs from ~1 hour ago to
+//  ~12 hours ahead.
+//
+
+import Foundation
+import CoreLocation
+
+/// One time-step of the precipitation field: a grid of mm/h values (row-major,
+/// north row first) at `time`. `isForecast` marks steps in the future.
+struct RadarFrame: Identifiable {
+    let time: Date
+    let isForecast: Bool
+    let values: [Double]
+    var id: TimeInterval { time.timeIntervalSince1970 }
+}
+
+/// A precipitation field over a square region: a stack of hourly frames.
+struct RadarField {
+    let center: CLLocationCoordinate2D
+    let halfSpan: CLLocationDegrees
+    let cols: Int
+    let rows: Int
+    let frames: [RadarFrame]
+
+    /// First forecast frame — the boundary drawn as "now".
+    var nowIndex: Int {
+        frames.firstIndex(where: { $0.isForecast }) ?? max(0, frames.count - 1)
+    }
+
+    /// Identity token so the map can tell when a new field has arrived.
+    var token: String {
+        "\(center.latitude),\(center.longitude),\(frames.first?.id ?? 0),\(frames.count)"
+    }
+}
+
+struct OpenMeteoRadarService {
+    /// Grid resolution (points per side) and half-width of the sampled box (deg).
+    static let grid = 16
+    static let halfSpan: CLLocationDegrees = 3.0
+    static let pastHours = 1
+    static let forecastHours = 12
+
+    enum RadarError: Error { case badResponse, noData }
+
+    func fetchField(center: CLLocationCoordinate2D) async throws -> RadarField {
+        let g = Self.grid
+        let h = Self.halfSpan
+
+        var lats: [String] = []
+        var lons: [String] = []
+        lats.reserveCapacity(g * g)
+        lons.reserveCapacity(g * g)
+        // Row-major, north (top) row first.
+        for j in 0..<g {
+            let lat = clampLat(center.latitude + h - (2 * h) * Double(j) / Double(g - 1))
+            for i in 0..<g {
+                let lon = wrapLon(center.longitude - h + (2 * h) * Double(i) / Double(g - 1))
+                lats.append(String(format: "%.4f", lat))
+                lons.append(String(format: "%.4f", lon))
+            }
+        }
+
+        var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        comps.queryItems = [
+            .init(name: "latitude", value: lats.joined(separator: ",")),
+            .init(name: "longitude", value: lons.joined(separator: ",")),
+            .init(name: "hourly", value: "precipitation"),
+            .init(name: "timezone", value: "GMT"),
+            .init(name: "past_days", value: "1"),
+            .init(name: "forecast_days", value: "2"),
+            .init(name: "precipitation_unit", value: "mm"),
+        ]
+        guard let url = comps.url else { throw RadarError.badResponse }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw RadarError.badResponse
+        }
+        let points = try JSONDecoder().decode([PointResponse].self, from: data)
+        guard points.count == g * g, let first = points.first else { throw RadarError.noData }
+
+        // All points share one time axis; parse it once and pick the window.
+        let formatter = Self.makeFormatter()
+        let times = first.hourly.time.map { formatter.date(from: $0) ?? Date(timeIntervalSince1970: 0) }
+        let now = Date()
+        let lower = now.addingTimeInterval(-Double(Self.pastHours) * 3600 - 1800)
+        let upper = now.addingTimeInterval(Double(Self.forecastHours) * 3600 + 1800)
+        let window = times.indices.filter { times[$0] >= lower && times[$0] <= upper }
+        guard !window.isEmpty else { throw RadarError.noData }
+
+        var frames: [RadarFrame] = []
+        frames.reserveCapacity(window.count)
+        for k in window {
+            let t = times[k]
+            var values = [Double](repeating: 0, count: g * g)
+            for p in 0..<(g * g) {
+                let arr = points[p].hourly.precipitation
+                values[p] = (k < arr.count ? arr[k] : nil).flatMap { $0 } ?? 0
+            }
+            frames.append(RadarFrame(time: t, isForecast: t > now, values: values))
+        }
+
+        return RadarField(center: center, halfSpan: h, cols: g, rows: g, frames: frames)
+    }
+
+    private func clampLat(_ v: Double) -> Double { min(max(v, -89), 89) }
+    private func wrapLon(_ v: Double) -> Double {
+        var x = v.truncatingRemainder(dividingBy: 360)
+        if x > 180 { x -= 360 } else if x < -180 { x += 360 }
+        return x
+    }
+
+    private static func makeFormatter() -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return f
+    }
+
+    private struct PointResponse: Decodable {
+        let hourly: Hourly
+        struct Hourly: Decodable {
+            let time: [String]
+            let precipitation: [Double?]
+        }
+    }
+}

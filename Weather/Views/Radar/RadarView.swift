@@ -2,10 +2,10 @@
 //  RadarView.swift
 //  Weather
 //
-//  Full-screen precipitation radar: a dark map under an animated RainViewer
-//  overlay, with an editorial timeline you can play or scrub. Sits in the same
-//  visual family as the rest of the app — serif headings, hairline chrome,
-//  white-on-dark.
+//  Full-screen precipitation radar: a map under an animated precipitation-
+//  forecast heatmap, with an editorial timeline you can play or scrub. Sits in
+//  the same visual family as the rest of the app — serif headings, hairline
+//  chrome, white-on-dark.
 //
 
 import SwiftUI
@@ -19,18 +19,17 @@ struct RadarView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var maps: RainViewerService.Maps?
+    @State private var field: RadarField?
     @State private var frameIndex = 0
     @State private var isPlaying = true
     @State private var isScrubbing = false
     @State private var dwellTicks = 0
     @State private var failed = false
 
-    private let service = RainViewerService()
-    private let palette = RainViewerService.colorScheme
+    private let service = OpenMeteoRadarService()
     private let tick = Timer.publish(every: 0.9, on: .main, in: .common).autoconnect()
 
-    private var frames: [RadarFrame] { maps?.frames ?? [] }
+    private var frames: [RadarFrame] { field?.frames ?? [] }
     private var currentFrame: RadarFrame? {
         guard frames.indices.contains(frameIndex) else { return frames.last }
         return frames[frameIndex]
@@ -40,12 +39,10 @@ struct RadarView: View {
         ZStack {
             Color(hex: 0x0A0E14).ignoresSafeArea()
 
-            if let maps {
+            if field != nil {
                 RadarMapView(center: place.coordinate,
-                             host: maps.host,
-                             frames: maps.frames,
-                             currentPath: currentFrame?.path,
-                             colorScheme: palette,
+                             field: field,
+                             currentIndex: frameIndex,
                              isDay: isDay)
                     .ignoresSafeArea()
                     .transition(.opacity)
@@ -151,7 +148,7 @@ struct RadarView: View {
 
                 RadarTimeline(count: frames.count,
                               index: $frameIndex,
-                              nowIndex: maps?.nowIndex ?? 0,
+                              nowIndex: field?.nowIndex ?? 0,
                               accent: accent,
                               isScrubbing: $isScrubbing)
             }
@@ -197,8 +194,8 @@ struct RadarView: View {
     private func load() async {
         failed = false
         do {
-            let result = try await service.fetchFrames()
-            maps = result
+            let result = try await service.fetchField(center: place.coordinate)
+            field = result
             // Open on "now" so playback runs forward into the forecast.
             frameIndex = result.nowIndex
         } catch {
@@ -206,14 +203,12 @@ struct RadarView: View {
         }
     }
 
-    /// "now", "−40 min", "+30 min" relative to the present moment.
+    /// "NOW", "1 HR AGO", "+3 HR" relative to the present moment.
     private func relativeLabel(for frame: RadarFrame) -> String {
         let minutes = Int((frame.time.timeIntervalSinceNow / 60).rounded())
-        switch minutes {
-        case -5...5: return "NOW"
-        case ..<0: return "\(minutes) MIN"
-        default: return "+\(minutes) MIN"
-        }
+        if abs(minutes) <= 30 { return "NOW" }
+        let hours = Int((Double(minutes) / 60).rounded())
+        return hours < 0 ? "\(-hours) HR AGO" : "+\(hours) HR"
     }
 }
 

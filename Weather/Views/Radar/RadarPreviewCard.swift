@@ -2,8 +2,8 @@
 //  RadarPreviewCard.swift
 //  Weather
 //
-//  A compact, non-interactive radar map in the main feed showing the latest
-//  observed frame. Tapping opens the full-screen, animatable RadarView.
+//  A compact, non-interactive precipitation map in the main feed showing the
+//  current frame. Tapping opens the full-screen, animatable RadarView.
 //
 
 import SwiftUI
@@ -14,13 +14,8 @@ struct RadarPreviewCard: View {
     let isDay: Bool
     var onOpen: () -> Void
 
-    @State private var maps: RainViewerService.Maps?
+    @State private var field: RadarField?
     @State private var failed = false
-
-    /// Latest observed frame (fall back to whatever's newest).
-    private var latest: RadarFrame? {
-        maps?.frames.last(where: { !$0.isForecast }) ?? maps?.frames.last
-    }
 
     var body: some View {
         Button {
@@ -34,12 +29,10 @@ struct RadarPreviewCard: View {
                 }
 
                 ZStack {
-                    if let maps, let latest {
+                    if let field {
                         RadarMapView(center: place.coordinate,
-                                     host: maps.host,
-                                     frames: [latest],
-                                     currentPath: latest.path,
-                                     colorScheme: RainViewerService.colorScheme,
+                                     field: field,
+                                     currentIndex: field.nowIndex,
                                      isDay: isDay,
                                      span: 6)
                             .allowsHitTesting(false)
@@ -66,7 +59,7 @@ struct RadarPreviewCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Precipitation radar for \(place.name). Opens the full radar map.")
         .task {
-            do { maps = try await RainViewerService().fetchFrames() }
+            do { field = try await OpenMeteoRadarService().fetchField(center: place.coordinate) }
             catch { failed = true }
         }
     }
