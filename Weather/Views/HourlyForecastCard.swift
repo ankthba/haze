@@ -1,0 +1,67 @@
+//
+//  HourlyForecastCard.swift
+//  Weather
+//
+//  Scrolling 24-hour strip with condition symbols, precip chance, and temps.
+//
+
+import SwiftUI
+
+struct HourlyForecastCard: View {
+    let bundle: WeatherBundle
+
+    private var hours: [HourPoint] { bundle.upcomingHours }
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 18) {
+                CardLabel(systemImage: "clock", title: "Hourly Forecast")
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 22) {
+                        ForEach(Array(hours.enumerated()), id: \.element.id) { index, hour in
+                            HourColumn(hour: hour,
+                                       timezone: bundle.timezone,
+                                       isNow: index == 0)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+                .horizontalFadeEdges()
+            }
+        }
+    }
+}
+
+private struct HourColumn: View {
+    let hour: HourPoint
+    let timezone: TimeZone
+    let isNow: Bool
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(isNow ? "Now" : Fmt.hour(hour.date, timezone: timezone))
+                .font(.system(.subheadline, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.8))
+
+            Image(systemName: hour.condition.symbolName)
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 22))
+                .frame(height: 26)
+
+            if hour.precipitationProbability >= 10 {
+                Text(Fmt.percent(hour.precipitationProbability))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x9FD6FF))
+            } else {
+                Text(" ")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+
+            Text(Fmt.tempDegree(hour.temperature))
+                .font(.serif(.title3))
+                .foregroundStyle(.white)
+        }
+        .frame(minWidth: 42)
+    }
+}
