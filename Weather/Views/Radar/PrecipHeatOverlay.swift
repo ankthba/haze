@@ -50,7 +50,7 @@ final class PrecipHeatRenderer: MKOverlayRenderer {
 /// it reads as soft blobs — not blocks — regardless of how MapKit scales it.
 enum PrecipHeat {
     /// Output resolution of the rendered heatmap (px per side).
-    private static let out = 256
+    private static let out = 320
 
     static func image(values: [Double], cols: Int, rows: Int) -> UIImage? {
         guard values.count == cols * rows, cols > 1, rows > 1 else { return nil }
@@ -96,27 +96,30 @@ enum PrecipHeat {
 
     // MARK: - Colour ramp
 
-    private static let lutMaxMM = 24.0
+    private static let lutMaxMM = 40.0
 
     /// Premultiplied-RGBA lookup table sampled from the continuous ramp, so the
     /// per-pixel hot path is a single array read.
-    private static let lut: [(UInt8, UInt8, UInt8, UInt8)] = (0..<256).map { i in
-        let v = Double(i) / 255.0 * lutMaxMM
+    private static let lut: [(UInt8, UInt8, UInt8, UInt8)] = (0..<512).map { i in
+        let v = Double(i) / 511.0 * lutMaxMM
         let (r, g, b, a) = color(forMMPerHour: v)
         return (UInt8(Double(r) * a), UInt8(Double(g) * a), UInt8(Double(b) * a), UInt8(a * 255))
     }
 
-    /// Soft, continuous palette mapping rain rate (mm/h) to colour + alpha — a
-    /// gentle wash from pale blue through teal and soft yellow to a muted rose.
+    /// Vivid NWS/NEXRAD-style reflectivity ramp mapping rain rate (mm/h) to
+    /// colour + alpha — cyan → blue → green → yellow → orange → red → magenta.
     private static func color(forMMPerHour v: Double) -> (Double, Double, Double, Double) {
         // (mm/h, r, g, b, alpha)
         let stops: [(Double, Double, Double, Double, Double)] = [
-            (0.00, 0x6F, 0xBE, 0xEC, 0.00),
-            (0.12, 0x6F, 0xBE, 0xEC, 0.20),
-            (0.60, 0x57, 0xC6, 0x9E, 0.32),
-            (1.50, 0xE3, 0xD2, 0x6E, 0.42),
-            (4.00, 0xE6, 0x9A, 0x5A, 0.50),
-            (10.0, 0xD9, 0x6A, 0x8E, 0.58),
+            (0.00, 0x04, 0xE9, 0xE7, 0.00),
+            (0.10, 0x04, 0xE9, 0xE7, 0.45),
+            (0.50, 0x01, 0x9F, 0xF4, 0.55),
+            (1.00, 0x02, 0xC5, 0x02, 0.63),
+            (2.50, 0xFD, 0xF8, 0x02, 0.71),
+            (5.00, 0xFD, 0x95, 0x00, 0.79),
+            (10.0, 0xFD, 0x00, 0x00, 0.85),
+            (20.0, 0xBC, 0x00, 0x00, 0.88),
+            (40.0, 0xF8, 0x00, 0xFD, 0.90),
         ]
         if v <= stops[0].0 { return (stops[0].1, stops[0].2, stops[0].3, stops[0].4) }
         for k in 1..<stops.count {

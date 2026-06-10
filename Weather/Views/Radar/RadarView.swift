@@ -290,11 +290,12 @@ private struct IntensityLegend: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             LinearGradient(
-                colors: [Color(hex: 0x8FE3D6), Color(hex: 0x57C46B),
-                         Color(hex: 0xE9D45C), Color(hex: 0xE89A4E), Color(hex: 0xD96A8E)],
+                colors: [Color(hex: 0x04E9E7), Color(hex: 0x019FF4), Color(hex: 0x02C502),
+                         Color(hex: 0xFDF802), Color(hex: 0xFD9500), Color(hex: 0xFD0000),
+                         Color(hex: 0xF800FD)],
                 startPoint: .leading, endPoint: .trailing
             )
-            .frame(width: 84, height: 5)
+            .frame(width: 92, height: 5)
             .clipShape(Capsule())
             Text("LIGHT · HEAVY")
                 .font(.system(size: 8.5, weight: .medium))

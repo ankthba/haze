@@ -34,7 +34,7 @@ struct RadarPreviewCard: View {
                                      field: field,
                                      currentIndex: field.nowIndex,
                                      isDay: isDay,
-                                     span: 4.5)
+                                     span: 3.5)
                             .allowsHitTesting(false)
                     } else {
                         Color(hex: 0x10151E)

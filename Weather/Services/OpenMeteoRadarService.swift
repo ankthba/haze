@@ -47,11 +47,12 @@ struct RadarField {
 struct OpenMeteoRadarService {
     /// Grid resolution (points per side) and half-width of the sampled box (deg).
     static let grid = 24
-    static let halfSpan: CLLocationDegrees = 2.5
+    static let halfSpan: CLLocationDegrees = 2.0
     static let pastHours = 1
     static let forecastHours = 12
-    /// Max points per request — Open-Meteo rejects very long URLs (~8k chars).
-    static let maxPerRequest = 180
+    /// Max points per request — Open-Meteo rejects long URLs (~8k chars) and
+    /// rate-limits bursts, so we keep to a couple of modest chunks.
+    static let maxPerRequest = 290
 
     enum RadarError: Error { case badResponse, noData }
 
@@ -68,8 +69,8 @@ struct OpenMeteoRadarService {
             let lat = clampLat(center.latitude + h - (2 * h) * Double(j) / Double(g - 1))
             for i in 0..<g {
                 let lon = wrapLon(center.longitude - h + (2 * h) * Double(i) / Double(g - 1))
-                lats.append(String(format: "%.4f", lat))
-                lons.append(String(format: "%.4f", lon))
+                lats.append(String(format: "%.3f", lat))
+                lons.append(String(format: "%.3f", lon))
             }
         }
 
@@ -115,16 +116,13 @@ struct OpenMeteoRadarService {
     }
 
     private func fetchChunk(lats: [String], lons: [String]) async throws -> [PointResponse] {
+        // Raw (unencoded) commas keep the URL short enough to fit more points;
+        // the values are plain numbers so nothing needs escaping.
         var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
-        comps.queryItems = [
-            .init(name: "latitude", value: lats.joined(separator: ",")),
-            .init(name: "longitude", value: lons.joined(separator: ",")),
-            .init(name: "hourly", value: "precipitation"),
-            .init(name: "timezone", value: "GMT"),
-            .init(name: "past_days", value: "1"),
-            .init(name: "forecast_days", value: "2"),
-            .init(name: "precipitation_unit", value: "mm"),
-        ]
+        comps.percentEncodedQuery =
+            "latitude=\(lats.joined(separator: ","))"
+            + "&longitude=\(lons.joined(separator: ","))"
+            + "&hourly=precipitation&timezone=GMT&past_days=1&forecast_days=2&precipitation_unit=mm"
         guard let url = comps.url else { throw RadarError.badResponse }
         var request = URLRequest(url: url)
         request.timeoutInterval = 20

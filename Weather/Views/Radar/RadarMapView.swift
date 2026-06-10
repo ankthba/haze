@@ -25,7 +25,7 @@ struct RadarMapView: UIViewRepresentable {
     var isDay: Bool = false
     /// Degrees of latitude shown — smaller is more zoomed in. Kept within the
     /// sampled grid box so the heatmap covers the view.
-    var span: CLLocationDegrees = 4.0
+    var span: CLLocationDegrees = 3.5
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
