@@ -52,8 +52,10 @@ struct RadarField {
 }
 
 struct RadarService {
-    /// Forecast-grid resolution and half-width of the sampled box (deg).
-    static let grid = 24
+    /// Forecast-grid resolution and half-width of the sampled box (deg). Kept
+    /// modest: each grid point is a weighted Open-Meteo call, and the main app
+    /// shares that quota — an over-large grid can rate-limit the whole app.
+    static let grid = 16
     static let halfSpan: CLLocationDegrees = 2.0
     static let forecastHours = 12
     static let maxPerRequest = 290
@@ -62,12 +64,14 @@ struct RadarService {
 
     enum RadarError: Error { case noData }
 
-    func buildField(center: CLLocationCoordinate2D) async throws -> RadarField {
-        // Fetch both sources concurrently; either may be absent without failing.
+    /// Build the timeline. `includeForecast` is false for the home-screen preview
+    /// so it shows the cheap detailed-radar frame without the costly grid fetch.
+    func buildField(center: CLLocationCoordinate2D, includeForecast: Bool = true) async throws -> RadarField {
+        // Fetch the (cheap) detailed radar always; only fetch the (expensive)
+        // forecast grid when asked. RainViewer runs concurrently meanwhile.
         async let radarTask = Self.fetchRainViewer(scheme: Self.radarColorScheme)
-        async let forecastTask = Self.fetchForecast(center: center)
+        let forecast = includeForecast ? await Self.fetchForecast(center: center) : nil
         let radarFrames = await radarTask
-        let forecast = await forecastTask
 
         let cutoff = radarFrames.map(\.time).max() ?? Date()
         var frames = radarFrames
@@ -161,7 +165,7 @@ struct RadarService {
         comps.percentEncodedQuery =
             "latitude=\(lats.joined(separator: ","))"
             + "&longitude=\(lons.joined(separator: ","))"
-            + "&hourly=precipitation&timezone=GMT&past_days=1&forecast_days=2&precipitation_unit=mm"
+            + "&hourly=precipitation&timezone=GMT&forecast_days=2&precipitation_unit=mm"
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 20

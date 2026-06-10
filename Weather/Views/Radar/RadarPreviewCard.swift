@@ -59,7 +59,9 @@ struct RadarPreviewCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Precipitation radar for \(place.name). Opens the full radar map.")
         .task {
-            do { field = try await RadarService().buildField(center: place.coordinate) }
+            // Detailed radar only — no costly forecast-grid fetch on the home feed.
+            do { field = try await RadarService().buildField(center: place.coordinate,
+                                                             includeForecast: false) }
             catch { failed = true }
         }
     }
