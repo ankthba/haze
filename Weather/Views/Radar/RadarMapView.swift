@@ -27,6 +27,8 @@ struct RadarMapView: UIViewRepresentable {
     /// `path` of the frame to show.
     let currentPath: String?
     let colorScheme: Int
+    /// Light Apple Maps by day, dark by night — matched to the location.
+    var isDay: Bool = false
     /// Degrees of latitude shown — smaller is more zoomed in.
     var span: CLLocationDegrees = 5
 
@@ -35,7 +37,7 @@ struct RadarMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator
-        map.overrideUserInterfaceStyle = .dark
+        map.overrideUserInterfaceStyle = isDay ? .light : .dark
 
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         config.pointOfInterestFilter = .excludingAll
@@ -61,6 +63,8 @@ struct RadarMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
+        let style: UIUserInterfaceStyle = isDay ? .light : .dark
+        if map.overrideUserInterfaceStyle != style { map.overrideUserInterfaceStyle = style }
         context.coordinator.show(currentPath: currentPath, frames: frames,
                                  host: host, color: colorScheme, on: map)
     }
@@ -103,7 +107,8 @@ struct RadarMapView: UIViewRepresentable {
             let view = (mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKMarkerAnnotationView)
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: id)
             view.glyphImage = UIImage(systemName: "mappin")
-            view.markerTintColor = .white
+            // A friendly blue reads on both the light (day) and dark (night) map.
+            view.markerTintColor = UIColor(red: 0.20, green: 0.52, blue: 0.96, alpha: 1)
             view.displayPriority = .required
             view.animatesWhenAdded = false
             return view

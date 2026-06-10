@@ -72,7 +72,8 @@ struct ContentView: View {
             if let bundle = viewModel.bundle {
                 RadarView(place: bundle.place,
                           timezone: bundle.timezone,
-                          accent: bundle.current.condition.accent)
+                          accent: bundle.current.condition.accent,
+                          isDay: bundle.current.isDay)
             }
         }
     }

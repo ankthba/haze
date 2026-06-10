@@ -11,6 +11,7 @@ import SwiftUI
 struct RadarPreviewCard: View {
     let place: Place
     let accent: Color
+    let isDay: Bool
     var onOpen: () -> Void
 
     @State private var maps: RainViewerService.Maps?
@@ -29,13 +30,7 @@ struct RadarPreviewCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     CardLabel(systemImage: "dot.radiowaves.left.and.right", title: "Radar")
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Text("Open")
-                        Image(systemName: "arrow.up.right")
-                    }
-                    .font(.system(.caption, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.6))
+                    OpenBadge()
                 }
 
                 ZStack {
@@ -44,7 +39,8 @@ struct RadarPreviewCard: View {
                                      host: maps.host,
                                      frames: [latest],
                                      currentPath: latest.path,
-                                     colorScheme: 4,
+                                     colorScheme: RainViewerService.colorScheme,
+                                     isDay: isDay,
                                      span: 6)
                             .allowsHitTesting(false)
                     } else {

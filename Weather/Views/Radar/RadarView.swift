@@ -15,6 +15,7 @@ struct RadarView: View {
     let place: Place
     let timezone: TimeZone
     let accent: Color
+    let isDay: Bool
 
     @Environment(\.dismiss) private var dismiss
 
@@ -26,8 +27,7 @@ struct RadarView: View {
     @State private var failed = false
 
     private let service = RainViewerService()
-    /// RainViewer "The Weather Channel" palette — vivid greens→reds over dark.
-    private let palette = 4
+    private let palette = RainViewerService.colorScheme
     private let tick = Timer.publish(every: 0.6, on: .main, in: .common).autoconnect()
 
     private var frames: [RadarFrame] { maps?.frames ?? [] }
@@ -45,7 +45,8 @@ struct RadarView: View {
                              host: maps.host,
                              frames: maps.frames,
                              currentPath: currentFrame?.path,
-                             colorScheme: palette)
+                             colorScheme: palette,
+                             isDay: isDay)
                     .ignoresSafeArea()
                     .transition(.opacity)
             } else if failed {
@@ -286,11 +287,11 @@ private struct IntensityLegend: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             LinearGradient(
-                colors: [Color(hex: 0x4CC76E), Color(hex: 0xE7D14B),
-                         Color(hex: 0xE08A3C), Color(hex: 0xD2433B)],
+                colors: [Color(hex: 0x8FE3D6), Color(hex: 0x57C46B),
+                         Color(hex: 0xE9D45C), Color(hex: 0xE89A4E), Color(hex: 0xD96A8E)],
                 startPoint: .leading, endPoint: .trailing
             )
-            .frame(width: 78, height: 5)
+            .frame(width: 84, height: 5)
             .clipShape(Capsule())
             Text("LIGHT · HEAVY")
                 .font(.system(size: 8.5, weight: .medium))

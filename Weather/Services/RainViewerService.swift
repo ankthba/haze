@@ -33,6 +33,11 @@ struct RainViewerService {
         }
     }
 
+    /// RainViewer palette used throughout the app. Scheme 8 ("Dark Sky") is a
+    /// smooth, desaturated blue→green→yellow→red ramp that reads cleanly on both
+    /// light and dark maps — gentler than the harsher default schemes.
+    static let colorScheme = 8
+
     enum RainViewerError: Error { case badResponse, noFrames }
 
     private let endpoint = URL(string: "https://api.rainviewer.com/public/weather-maps.json")!

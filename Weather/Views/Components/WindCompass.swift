@@ -16,7 +16,10 @@ struct WindCompass: View {
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                CardLabel(systemImage: "wind", title: "Wind")
+                HStack {
+                    CardLabel(systemImage: "wind", title: "Wind")
+                    OpenBadge()
+                }
 
                 HStack(spacing: 16) {
                     dial

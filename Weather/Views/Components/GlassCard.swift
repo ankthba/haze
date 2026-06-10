@@ -91,6 +91,21 @@ struct CardButtonStyle: ButtonStyle {
     }
 }
 
+/// Small "Open ↗" affordance for a card header, signalling the card opens a
+/// fuller page when tapped. Pairs with `CardLabel` in an `HStack`.
+struct OpenBadge: View {
+    var label: String = "Open"
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(label)
+            Image(systemName: "arrow.up.right")
+        }
+        .font(.system(.caption, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.6))
+    }
+}
+
 /// Editorial section header: a small-caps tracked title with a leading symbol.
 struct CardLabel: View {
     let systemImage: String

@@ -53,7 +53,9 @@ struct WeatherScreen: View {
                     DailyForecastCard(bundle: bundle, accent: condition.accent) { day in
                         selectedDay = day
                     }
-                    RadarPreviewCard(place: bundle.place, accent: condition.accent) {
+                    RadarPreviewCard(place: bundle.place,
+                                     accent: condition.accent,
+                                     isDay: bundle.current.isDay) {
                         showRadar = true
                     }
                     DetailsSection(bundle: bundle,

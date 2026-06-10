@@ -127,6 +127,12 @@ struct DetailsSection: View {
                             .foregroundStyle(.white.opacity(0.6))
                     }
                 }
+
+                // Chevron marks rows that open a detail page; the space is
+                // reserved on every row so the values stay aligned.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(metric == nil ? 0 : 0.3))
             }
             .padding(.vertical, 18)
             .contentShape(Rectangle())
