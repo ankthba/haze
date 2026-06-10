@@ -12,7 +12,7 @@ Beautiful, Accurate Weather
 A calm, editorial weather app — big serif numerals, soft skies that shift with the day, and accurate forecasts. No ads. No accounts.
 
 ## Keywords (max 100, comma-separated, NO spaces after commas)
-forecast,hourly,daily,minimal,widget,sunrise,sunset,uv,humidity,wind,pressure,air,quality,clean,rain
+forecast,hourly,daily,minimal,widget,sunrise,sunset,uv,humidity,wind,pressure,air,quality,radar,rain
 
 ## Description (max 4000)
 Haze is a beautifully minimal weather app — an editorial take on the forecast, built around big serif numerals, soft adapting gradients, and calm whitespace. Every screen shifts with the sky: the background drifts from dawn to day to dusk to night, tinted by the current conditions, with a soft atmospheric haze along the horizon.
@@ -22,6 +22,7 @@ Accurate, no-nonsense data from Open-Meteo — a blend of the ECMWF, GFS, and IC
 FEATURES
 - Current conditions with feels-like, daily high/low, and a living sky that matches the exact moment
 - Hourly forecast and a 72-hour temperature trend you can scrub by dragging your finger
+- Live precipitation radar — an animated map you can play or scrub through time
 - 10-day outlook — tap any day for a full hour-by-hour breakdown
 - A sunrise and sunset arc you can scrub across the day, with a sun that glows from gold to deep amber
 - Wind compass, UV index, humidity, pressure, cloud cover, precipitation, dew point, and US air quality
