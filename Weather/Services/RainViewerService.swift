@@ -38,6 +38,9 @@ struct RainViewerService {
     /// light and dark maps — gentler than the harsher default schemes.
     static let colorScheme = 8
 
+    /// How many recent observed frames to keep before the forecast frames.
+    static let recentPastFrames = 3
+
     enum RainViewerError: Error { case badResponse, noFrames }
 
     private let endpoint = URL(string: "https://api.rainviewer.com/public/weather-maps.json")!
@@ -54,13 +57,16 @@ struct RainViewerService {
         }
 
         let decoded = try JSONDecoder().decode(WeatherMaps.self, from: data)
-        let past = decoded.radar.past.map {
+        let allPast = decoded.radar.past.map {
             RadarFrame(time: Date(timeIntervalSince1970: $0.time), path: $0.path, isForecast: false)
         }
         let nowcast = (decoded.radar.nowcast ?? []).map {
             RadarFrame(time: Date(timeIntervalSince1970: $0.time), path: $0.path, isForecast: true)
         }
-        let frames = (past + nowcast).sorted { $0.time < $1.time }
+        // Future-focused: keep only a little recent past for context (the loop is
+        // about where rain is headed), then all of the forecast nowcast frames.
+        let recentPast = allPast.sorted { $0.time < $1.time }.suffix(Self.recentPastFrames)
+        let frames = (Array(recentPast) + nowcast).sorted { $0.time < $1.time }
         guard !frames.isEmpty else { throw RainViewerError.noFrames }
         return Maps(host: decoded.host, frames: frames)
     }

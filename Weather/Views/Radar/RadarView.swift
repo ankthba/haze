@@ -28,7 +28,7 @@ struct RadarView: View {
 
     private let service = RainViewerService()
     private let palette = RainViewerService.colorScheme
-    private let tick = Timer.publish(every: 0.6, on: .main, in: .common).autoconnect()
+    private let tick = Timer.publish(every: 0.9, on: .main, in: .common).autoconnect()
 
     private var frames: [RadarFrame] { maps?.frames ?? [] }
     private var currentFrame: RadarFrame? {
@@ -50,8 +50,14 @@ struct RadarView: View {
                     .ignoresSafeArea()
                     .transition(.opacity)
             } else if failed {
-                placeholder(icon: "antenna.radiowaves.left.and.right.slash",
-                            text: "Radar isn't available right now.")
+                Button {
+                    Haptics.tap()
+                    Task { await load() }
+                } label: {
+                    placeholder(icon: "antenna.radiowaves.left.and.right.slash",
+                                text: "Radar isn't available.\nTap to retry.")
+                }
+                .buttonStyle(.plain)
             } else {
                 placeholder(icon: "dot.radiowaves.left.and.right",
                             text: "Loading radar…", pulse: true)
@@ -169,6 +175,7 @@ struct RadarView: View {
             Text(text)
                 .font(.serif(.title3))
                 .foregroundStyle(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
         }
     }
 
@@ -177,9 +184,10 @@ struct RadarView: View {
     private func advance() {
         guard isPlaying, !isScrubbing, frames.count > 1 else { return }
         if frameIndex >= frames.count - 1 {
-            // Hold on the latest frame a moment, then loop from the start.
+            // Linger on the latest forecast frame — that's the point of interest —
+            // then loop back to the start.
             dwellTicks += 1
-            if dwellTicks >= 3 { dwellTicks = 0; frameIndex = 0 }
+            if dwellTicks >= 4 { dwellTicks = 0; frameIndex = 0 }
         } else {
             dwellTicks = 0
             frameIndex += 1
@@ -187,12 +195,12 @@ struct RadarView: View {
     }
 
     private func load() async {
+        failed = false
         do {
             let result = try await service.fetchFrames()
             maps = result
-            // Open on "now" (the most recent observed frame).
+            // Open on "now" so playback runs forward into the forecast.
             frameIndex = result.nowIndex
-            failed = false
         } catch {
             failed = true
         }

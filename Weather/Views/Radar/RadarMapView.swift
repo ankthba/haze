@@ -70,32 +70,37 @@ struct RadarMapView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
+        /// Soft, translucent radar so the colours read as a gentle wash.
+        private let tileAlpha: CGFloat = 0.55
+        private var queue: [MKTileOverlay] = []   // oldest → newest, capped at 2
         private var shownPath: String?
 
-        /// Swap the single radar overlay to the requested frame.
+        /// Show the requested frame on top, keeping the immediately-previous frame
+        /// beneath it so there's never a blank gap while the new tiles load — this
+        /// is what kills the flicker. Anything older is dropped.
         func show(currentPath: String?, frames: [RadarFrame], host: String, color: Int, on map: MKMapView) {
             guard let currentPath, currentPath != shownPath,
                   let frame = frames.first(where: { $0.path == currentPath }) else { return }
             shownPath = currentPath
 
-            let template = RainViewerService.tileTemplate(host: host, frame: frame, color: color)
+            // 512px tiles cover 4× the area each, so a frame fills in with far fewer
+            // requests — much quicker to paint, and smoother on replay.
+            let template = RainViewerService.tileTemplate(host: host, frame: frame, color: color, size: 512)
             let overlay = MKTileOverlay(urlTemplate: template)
             overlay.canReplaceMapContent = false
-            overlay.tileSize = CGSize(width: 256, height: 256)
+            overlay.tileSize = CGSize(width: 512, height: 512)
 
-            // Paint the new frame above the old, then drop the previous overlays a
-            // beat later so there's no gap mid-swap (cached tiles appear at once).
-            let previous = map.overlays.compactMap { $0 as? MKTileOverlay }
             map.addOverlay(overlay, level: .aboveLabels)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                for old in previous { map.removeOverlay(old) }
+            queue.append(overlay)
+            while queue.count > 2 {
+                map.removeOverlay(queue.removeFirst())
             }
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let tile = overlay as? MKTileOverlay {
                 let renderer = MKTileOverlayRenderer(tileOverlay: tile)
-                renderer.alpha = 0.85
+                renderer.alpha = tileAlpha
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
