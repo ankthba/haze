@@ -26,7 +26,7 @@ struct RadarView: View {
     @State private var dwellTicks = 0
     @State private var failed = false
 
-    private let service = OpenMeteoRadarService()
+    private let service = RadarService()
     private let tick = Timer.publish(every: 0.9, on: .main, in: .common).autoconnect()
 
     private var frames: [RadarFrame] { field?.frames ?? [] }
@@ -194,10 +194,11 @@ struct RadarView: View {
     private func load() async {
         failed = false
         do {
-            let result = try await service.fetchField(center: place.coordinate)
+            let result = try await service.buildField(center: place.coordinate)
             field = result
-            // Open on "now" so playback runs forward into the forecast.
-            frameIndex = result.nowIndex
+            // Open on the latest detailed (real-radar) frame, ~now; playback then
+            // runs forward into the forecast.
+            frameIndex = result.latestRadarIndex
         } catch {
             failed = true
         }

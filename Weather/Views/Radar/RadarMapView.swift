@@ -2,9 +2,9 @@
 //  RadarMapView.swift
 //  Weather
 //
-//  A dark/light MapKit map with an animated precipitation-forecast heatmap. The
-//  per-hour frames are precomputed into tiny images once; stepping through time
-//  just swaps the renderer's image, so playback is instant and flicker-free.
+//  A dark/light MapKit map that renders a hybrid radar timeline. Detailed past
+//  frames are real RainViewer radar tiles; forecast frames are the Open-Meteo
+//  heatmap. The coordinator switches layer type as the current frame changes.
 //
 
 import SwiftUI
@@ -23,8 +23,7 @@ struct RadarMapView: UIViewRepresentable {
     let currentIndex: Int
     /// Light Apple Maps by day, dark by night — matched to the location.
     var isDay: Bool = false
-    /// Degrees of latitude shown — smaller is more zoomed in. Kept within the
-    /// sampled grid box so the heatmap covers the view.
+    /// Degrees of latitude shown — smaller is more zoomed in.
     var span: CLLocationDegrees = 3.5
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -64,37 +63,77 @@ struct RadarMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         private var token: String?
-        private var images: [UIImage?] = []
-        private var index = 0
-        private var overlay: PrecipHeatOverlay?
-        private weak var renderer: PrecipHeatRenderer?
+        private var frames: [RadarFrame] = []
+        private var gridImages: [UIImage?] = []      // aligned to frames; nil for tile frames
+
+        private var heatOverlay: PrecipHeatOverlay?
+        private weak var heatRenderer: PrecipHeatRenderer?
+        private var pendingHeatImage: UIImage?
+
+        private var tileQueue: [MKTileOverlay] = []   // oldest → newest, capped at 2
+        private var shownTemplate: String?
 
         func update(field: RadarField?, index: Int, on map: MKMapView) {
             guard let field else { return }
-            self.index = index
 
-            // Rebuild the overlay + frame images only when a new field arrives.
             if token != field.token {
                 token = field.token
-                if let overlay { map.removeOverlay(overlay) }
-                images = field.frames.map {
-                    PrecipHeat.image(values: $0.values, cols: field.cols, rows: field.rows)
+                frames = field.frames
+                map.removeOverlays(map.overlays)
+                tileQueue.removeAll(); shownTemplate = nil
+                gridImages = field.frames.map { frame in
+                    if case .grid(let v) = frame.layer {
+                        return PrecipHeat.image(values: v, cols: field.cols, rows: field.rows)
+                    }
+                    return nil
                 }
-                let o = PrecipHeatOverlay(center: field.center, halfSpan: field.halfSpan)
-                overlay = o
-                map.addOverlay(o, level: .aboveLabels)
+                let heat = PrecipHeatOverlay(center: field.center, halfSpan: field.halfSpan)
+                heatOverlay = heat
+                map.addOverlay(heat, level: .aboveLabels)
             }
 
-            if let renderer, images.indices.contains(index) {
-                renderer.image = images[index]
+            guard frames.indices.contains(index) else { return }
+            switch frames[index].layer {
+            case .grid:
+                clearTiles(on: map)
+                pendingHeatImage = gridImages[index]
+                heatRenderer?.image = pendingHeatImage
+            case .tiles(let template):
+                pendingHeatImage = nil
+                heatRenderer?.image = nil
+                showTile(template, on: map)
             }
+        }
+
+        /// Show the requested radar tile frame, keeping the previous one beneath
+        /// it so there's no blank gap while tiles load.
+        private func showTile(_ template: String, on map: MKMapView) {
+            guard template != shownTemplate else { return }
+            shownTemplate = template
+            let overlay = MKTileOverlay(urlTemplate: template)
+            overlay.canReplaceMapContent = false
+            overlay.tileSize = CGSize(width: 256, height: 256)
+            map.addOverlay(overlay, level: .aboveLabels)
+            tileQueue.append(overlay)
+            while tileQueue.count > 2 { map.removeOverlay(tileQueue.removeFirst()) }
+        }
+
+        private func clearTiles(on map: MKMapView) {
+            for o in tileQueue { map.removeOverlay(o) }
+            tileQueue.removeAll()
+            shownTemplate = nil
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let heat = overlay as? PrecipHeatOverlay {
                 let r = PrecipHeatRenderer(overlay: heat)
-                r.image = images.indices.contains(index) ? images[index] : nil
-                renderer = r
+                r.image = pendingHeatImage
+                heatRenderer = r
+                return r
+            }
+            if let tile = overlay as? MKTileOverlay {
+                let r = MKTileOverlayRenderer(tileOverlay: tile)
+                r.alpha = 0.85
                 return r
             }
             return MKOverlayRenderer(overlay: overlay)
@@ -106,7 +145,6 @@ struct RadarMapView: UIViewRepresentable {
             let view = (mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKMarkerAnnotationView)
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: id)
             view.glyphImage = UIImage(systemName: "mappin")
-            // A friendly blue reads on both the light (day) and dark (night) map.
             view.markerTintColor = UIColor(red: 0.20, green: 0.52, blue: 0.96, alpha: 1)
             view.displayPriority = .required
             view.animatesWhenAdded = false

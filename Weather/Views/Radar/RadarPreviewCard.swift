@@ -32,7 +32,7 @@ struct RadarPreviewCard: View {
                     if let field {
                         RadarMapView(center: place.coordinate,
                                      field: field,
-                                     currentIndex: field.nowIndex,
+                                     currentIndex: field.latestRadarIndex,
                                      isDay: isDay,
                                      span: 3.5)
                             .allowsHitTesting(false)
@@ -59,7 +59,7 @@ struct RadarPreviewCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Precipitation radar for \(place.name). Opens the full radar map.")
         .task {
-            do { field = try await OpenMeteoRadarService().fetchField(center: place.coordinate) }
+            do { field = try await RadarService().buildField(center: place.coordinate) }
             catch { failed = true }
         }
     }
