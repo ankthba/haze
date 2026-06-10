@@ -42,7 +42,8 @@ struct RadarPreviewCard: View {
                     if let maps, let latest {
                         RadarMapView(center: place.coordinate,
                                      host: maps.host,
-                                     frame: latest,
+                                     frames: [latest],
+                                     currentPath: latest.path,
                                      colorScheme: 4,
                                      span: 6)
                             .allowsHitTesting(false)

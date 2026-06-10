@@ -2,10 +2,10 @@
 //  RadarMapView.swift
 //  Weather
 //
-//  A dark, muted MapKit map with an animated precipitation-radar tile overlay.
-//  The visible frame is driven from SwiftUI; the coordinator swaps tile overlays
-//  as the frame changes. MapKit caches tiles by URL, so playback is smooth once
-//  a loop has been seen.
+//  A dark, muted MapKit map with a preloaded stack of precipitation-radar tile
+//  overlays — one per frame. Only the current frame is shown (others sit at zero
+//  alpha), so stepping through time is an instant cel-flip with no reload flicker
+//  once tiles have cached. Pass a single frame for a static preview.
 //
 
 import SwiftUI
@@ -21,7 +21,9 @@ extension Place {
 struct RadarMapView: UIViewRepresentable {
     let center: CLLocationCoordinate2D
     let host: String
-    let frame: RadarFrame?
+    let frames: [RadarFrame]
+    /// `path` of the frame to show; others stay hidden.
+    let currentPath: String?
     let colorScheme: Int
     /// Degrees of latitude shown — smaller is more zoomed in.
     var span: CLLocationDegrees = 5
@@ -49,7 +51,6 @@ struct RadarMapView: UIViewRepresentable {
         )
         map.setRegion(region, animated: false)
 
-        // A quiet pin for the selected place.
         let marker = MKPointAnnotation()
         marker.coordinate = center
         map.addAnnotation(marker)
@@ -58,37 +59,54 @@ struct RadarMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
-        context.coordinator.show(frame: frame, host: host, color: colorScheme, on: map)
+        context.coordinator.sync(frames: frames, host: host, color: colorScheme,
+                                 current: currentPath, on: map)
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
-        private var shownPath: String?
+        private let visibleAlpha: CGFloat = 0.85
+        private var pathByOverlay: [ObjectIdentifier: String] = [:]
+        private var rendererByPath: [String: MKTileOverlayRenderer] = [:]
+        private var builtKey: String?
+        private var currentPath: String?
 
-        func show(frame: RadarFrame?, host: String, color: Int, on map: MKMapView) {
-            guard let frame, frame.path != shownPath else { return }
-            shownPath = frame.path
+        /// Build the overlay stack once per frame set, then show only `current`.
+        func sync(frames: [RadarFrame], host: String, color: Int, current: String?, on map: MKMapView) {
+            let key = "\(color)|" + frames.map(\.path).joined(separator: ",")
+            if key != builtKey {
+                builtKey = key
+                map.removeOverlays(map.overlays.filter { $0 is MKTileOverlay })
+                pathByOverlay.removeAll()
+                rendererByPath.removeAll()
+                for frame in frames {
+                    let template = RainViewerService.tileTemplate(host: host, frame: frame, color: color)
+                    let overlay = MKTileOverlay(urlTemplate: template)
+                    overlay.canReplaceMapContent = false
+                    overlay.tileSize = CGSize(width: 256, height: 256)
+                    pathByOverlay[ObjectIdentifier(overlay)] = frame.path
+                    map.addOverlay(overlay, level: .aboveLabels)
+                }
+            }
 
-            let template = RainViewerService.tileTemplate(host: host, frame: frame, color: color)
-            let overlay = MKTileOverlay(urlTemplate: template)
-            overlay.canReplaceMapContent = false
-            overlay.tileSize = CGSize(width: 256, height: 256)
-
-            // Paint the new frame above the old, then drop the previous overlays a
-            // beat later so there's no gap mid-swap (cached tiles appear instantly).
-            let previous = map.overlays.compactMap { $0 as? MKTileOverlay }
-            map.addOverlay(overlay, level: .aboveLabels)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                for old in previous { map.removeOverlay(old) }
+            currentPath = current
+            for (path, renderer) in rendererByPath {
+                let target: CGFloat = (path == current) ? visibleAlpha : 0
+                if renderer.alpha != target {
+                    renderer.alpha = target
+                    renderer.setNeedsDisplay()
+                }
             }
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let tile = overlay as? MKTileOverlay {
-                let renderer = MKTileOverlayRenderer(tileOverlay: tile)
-                renderer.alpha = 0.82
-                return renderer
+            guard let tile = overlay as? MKTileOverlay else {
+                return MKOverlayRenderer(overlay: overlay)
             }
-            return MKOverlayRenderer(overlay: overlay)
+            let renderer = MKTileOverlayRenderer(tileOverlay: tile)
+            let path = pathByOverlay[ObjectIdentifier(tile)]
+            renderer.alpha = (path != nil && path == currentPath) ? visibleAlpha : 0
+            if let path { rendererByPath[path] = renderer }
+            return renderer
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {

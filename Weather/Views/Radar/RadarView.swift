@@ -43,7 +43,8 @@ struct RadarView: View {
             if let maps {
                 RadarMapView(center: place.coordinate,
                              host: maps.host,
-                             frame: currentFrame,
+                             frames: maps.frames,
+                             currentPath: currentFrame?.path,
                              colorScheme: palette)
                     .ignoresSafeArea()
                     .transition(.opacity)
