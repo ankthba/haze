@@ -35,6 +35,23 @@ struct RadarView: View {
         return frames[frameIndex]
     }
 
+    /// Each frame's position along the timeline, normalized 0…1 by *time* — so a
+    /// 12h past and 12h future span equal width even if their frame counts differ.
+    private var framePositions: [Double] {
+        let times = frames.map(\.time.timeIntervalSince1970)
+        guard let lo = times.first, let hi = times.last, hi > lo else {
+            return Array(repeating: 0, count: frames.count)
+        }
+        return times.map { ($0 - lo) / (hi - lo) }
+    }
+
+    /// Normalized position of "now" on the timeline (the past/forecast boundary).
+    private var nowPosition: Double {
+        let times = frames.map(\.time.timeIntervalSince1970)
+        guard let lo = times.first, let hi = times.last, hi > lo else { return 0 }
+        return min(max((Date().timeIntervalSince1970 - lo) / (hi - lo), 0), 1)
+    }
+
     var body: some View {
         ZStack {
             Color(hex: 0x0A0E14).ignoresSafeArea()
@@ -146,9 +163,9 @@ struct RadarView: View {
                 .buttonStyle(CardButtonStyle())
                 .accessibilityLabel(isPlaying ? "Pause radar animation" : "Play radar animation")
 
-                RadarTimeline(count: frames.count,
+                RadarTimeline(positions: framePositions,
                               index: $frameIndex,
-                              nowIndex: field?.nowIndex ?? 0,
+                              nowPosition: nowPosition,
                               accent: accent,
                               isScrubbing: $isScrubbing)
             }
@@ -218,18 +235,19 @@ struct RadarView: View {
 /// A hairline track of frame ticks with a draggable accent thumb and a brighter
 /// "now" divider between observed and forecast frames.
 private struct RadarTimeline: View {
-    let count: Int
+    let positions: [Double]   // each frame's normalized 0…1 position by time
     @Binding var index: Int
-    let nowIndex: Int
+    let nowPosition: Double
     let accent: Color
     @Binding var isScrubbing: Bool
+
+    private func pos(_ i: Int) -> Double { positions.indices.contains(i) ? positions[i] : 0 }
 
     var body: some View {
         GeometryReader { geo in
             let width = geo.size.width
-            let step = count > 1 ? width / CGFloat(count - 1) : 0
-            let thumbX = step * CGFloat(index)
-            let nowX = step * CGFloat(nowIndex)
+            let thumbX = width * pos(index)
+            let nowX = width * nowPosition
 
             ZStack(alignment: .leading) {
                 // Base track
@@ -242,12 +260,12 @@ private struct RadarTimeline: View {
                     .fill(accent.opacity(0.8))
                     .frame(width: max(0, thumbX), height: 3)
 
-                // Frame ticks
-                ForEach(0..<max(count, 1), id: \.self) { i in
+                // Frame ticks (spaced by time)
+                ForEach(positions.indices, id: \.self) { i in
                     Circle()
                         .fill(.white.opacity(i <= index ? 0.0 : 0.35))
                         .frame(width: 2, height: 2)
-                        .offset(x: step * CGFloat(i) - 1)
+                        .offset(x: width * positions[i] - 1)
                 }
 
                 // "Now" divider
@@ -270,9 +288,12 @@ private struct RadarTimeline: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         isScrubbing = true
-                        guard step > 0 else { return }
-                        let raw = Int((value.location.x / step).rounded())
-                        let clamped = min(max(raw, 0), count - 1)
+                        guard width > 0, !positions.isEmpty else { return }
+                        let target = min(max(value.location.x / width, 0), 1)
+                        // Nearest frame to the dragged time position.
+                        let clamped = positions.indices.min(by: {
+                            abs(positions[$0] - target) < abs(positions[$1] - target)
+                        }) ?? 0
                         if clamped != index {
                             index = clamped
                             Haptics.selection()
