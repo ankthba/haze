@@ -32,7 +32,7 @@ struct RadarPreviewCard: View {
                     if let field {
                         RadarMapView(center: place.coordinate,
                                      field: field,
-                                     currentIndex: field.latestRadarIndex,
+                                     currentIndex: field.latestObservedIndex,
                                      isDay: isDay,
                                      span: 3.5)
                             .allowsHitTesting(false)

@@ -2,9 +2,11 @@
 //  RadarMapView.swift
 //  Weather
 //
-//  A dark/light MapKit map that renders a hybrid radar timeline. Detailed past
-//  frames are real RainViewer radar tiles; forecast frames are the Open-Meteo
-//  heatmap. The coordinator switches layer type as the current frame changes.
+//  A dark/light MapKit map with an animated radar tile overlay. Every frame is
+//  an XYZ tile layer (IEM observed/forecast, or RainViewer); the coordinator
+//  swaps the overlay per frame, keeping the previous one beneath so there's no
+//  blank gap while tiles load. The camera is locked so the view can't scroll off
+//  the data or into unsupported zoom levels.
 //
 
 import SwiftUI
@@ -24,9 +26,12 @@ struct RadarMapView: UIViewRepresentable {
     /// Light Apple Maps by day, dark by night — matched to the location.
     var isDay: Bool = false
     /// Degrees of latitude shown — smaller is more zoomed in.
-    var span: CLLocationDegrees = 3.5
+    var span: CLLocationDegrees = 6
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    /// Softened so the radar reads as a gentle wash over the map, not a slab.
+    private let tileAlpha: CGFloat = 0.6
+
+    func makeCoordinator() -> Coordinator { Coordinator(tileAlpha: tileAlpha) }
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -37,9 +42,8 @@ struct RadarMapView: UIViewRepresentable {
         config.pointOfInterestFilter = .excludingAll
         map.preferredConfiguration = config
 
-        // Lock the camera: the radar data only covers a fixed box and a limited
-        // set of zoom levels, so free pan/zoom would scroll off into emptiness
-        // and trigger "unsupported zoom" tile errors. A fixed frame just works.
+        // Lock the camera: radar tiles only cover certain zoom levels/areas, so
+        // free pan/zoom would scroll into emptiness or unsupported tiles.
         map.isRotateEnabled = false
         map.isPitchEnabled = false
         map.isZoomEnabled = false
@@ -67,83 +71,46 @@ struct RadarMapView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
+        private let tileAlpha: CGFloat
         private var token: String?
         private var frames: [RadarFrame] = []
-        private var gridImages: [UIImage?] = []      // aligned to frames; nil for tile frames
-
-        private var heatOverlay: PrecipHeatOverlay?
-        private weak var heatRenderer: PrecipHeatRenderer?
-        private var pendingHeatImage: UIImage?
-
-        private var tileQueue: [MKTileOverlay] = []   // oldest → newest, capped at 2
+        private var queue: [MKTileOverlay] = []   // oldest → newest, capped at 2
         private var shownTemplate: String?
+
+        init(tileAlpha: CGFloat) { self.tileAlpha = tileAlpha }
 
         func update(field: RadarField?, index: Int, on map: MKMapView) {
             guard let field else { return }
-
             if token != field.token {
                 token = field.token
                 frames = field.frames
-                map.removeOverlays(map.overlays)
-                tileQueue.removeAll(); shownTemplate = nil
-                gridImages = field.frames.map { frame in
-                    if case .grid(let v) = frame.layer {
-                        return PrecipHeat.image(values: v, cols: field.cols, rows: field.rows)
-                    }
-                    return nil
-                }
-                let heat = PrecipHeatOverlay(center: field.center, halfSpan: field.halfSpan)
-                heatOverlay = heat
-                map.addOverlay(heat, level: .aboveLabels)
+                map.removeOverlays(map.overlays.filter { $0 is MKTileOverlay })
+                queue.removeAll()
+                shownTemplate = nil
             }
-
             guard frames.indices.contains(index) else { return }
-            switch frames[index].layer {
-            case .grid:
-                clearTiles(on: map)
-                pendingHeatImage = gridImages[index]
-                heatRenderer?.image = pendingHeatImage
-            case .tiles(let template):
-                pendingHeatImage = nil
-                heatRenderer?.image = nil
-                showTile(template, on: map)
-            }
+            show(frames[index].urlTemplate, on: map)
         }
 
-        /// Show the requested radar tile frame, keeping the previous one beneath
-        /// it so there's no blank gap while tiles load.
-        private func showTile(_ template: String, on map: MKMapView) {
+        private func show(_ template: String, on map: MKMapView) {
             guard template != shownTemplate else { return }
             shownTemplate = template
+
             let overlay = MKTileOverlay(urlTemplate: template)
             overlay.canReplaceMapContent = false
             overlay.tileSize = CGSize(width: 256, height: 256)
-            // RainViewer serves a limited zoom range; clamp so MapKit scales the
-            // nearest level instead of requesting unsupported tiles (404s).
             overlay.minimumZ = 1
             overlay.maximumZ = 10
             map.addOverlay(overlay, level: .aboveLabels)
-            tileQueue.append(overlay)
-            while tileQueue.count > 2 { map.removeOverlay(tileQueue.removeFirst()) }
-        }
-
-        private func clearTiles(on map: MKMapView) {
-            for o in tileQueue { map.removeOverlay(o) }
-            tileQueue.removeAll()
-            shownTemplate = nil
+            queue.append(overlay)
+            while queue.count > 2 { map.removeOverlay(queue.removeFirst()) }
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let heat = overlay as? PrecipHeatOverlay {
-                let r = PrecipHeatRenderer(overlay: heat)
-                r.image = pendingHeatImage
-                heatRenderer = r
-                return r
-            }
             if let tile = overlay as? MKTileOverlay {
-                let r = MKTileOverlayRenderer(tileOverlay: tile)
-                r.alpha = 0.85
-                return r
+                let renderer = MKTileOverlayRenderer(tileOverlay: tile)
+                renderer.alpha = tileAlpha
+                return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
         }

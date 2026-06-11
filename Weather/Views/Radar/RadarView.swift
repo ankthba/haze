@@ -27,7 +27,7 @@ struct RadarView: View {
     @State private var failed = false
 
     private let service = RadarService()
-    private let tick = Timer.publish(every: 0.9, on: .main, in: .common).autoconnect()
+    private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     private var frames: [RadarFrame] { field?.frames ?? [] }
     private var currentFrame: RadarFrame? {
@@ -196,9 +196,9 @@ struct RadarView: View {
         do {
             let result = try await service.buildField(center: place.coordinate)
             field = result
-            // Open on the latest detailed (real-radar) frame, ~now; playback then
+            // Open on the latest observed (real-radar) frame, ~now; playback then
             // runs forward into the forecast.
-            frameIndex = result.latestRadarIndex
+            frameIndex = result.latestObservedIndex
         } catch {
             failed = true
         }
