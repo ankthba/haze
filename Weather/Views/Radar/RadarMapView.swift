@@ -52,6 +52,13 @@ struct RadarMapView: UIViewRepresentable {
         map.showsScale = false
         map.showsUserLocation = false
 
+        // Drop the Apple Maps attribution below the floating controls panel:
+        // by default it hugs the safe area, which is exactly where the panel
+        // sits, leaving the logo covered. Ignoring the safe-area margin lets
+        // it sit near the very bottom edge, in the clear.
+        map.insetsLayoutMarginsFromSafeArea = false
+        map.layoutMargins = UIEdgeInsets(top: 0, left: 12, bottom: 6, right: 12)
+
         map.setRegion(MKCoordinateRegion(
             center: center,
             span: MKCoordinateSpan(latitudeDelta: span, longitudeDelta: span)

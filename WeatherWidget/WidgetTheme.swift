@@ -51,8 +51,8 @@ struct WidgetCardBackground: View {
     let hexes: [UInt]
 
     /// Blend a hex color toward white for a subtle, card-like softening — kept
-    /// light so the widget still matches the app's actual sky colours.
-    private func pastel(_ hex: UInt, _ amount: Double = 0.16) -> Color {
+    /// very light so the widget matches the app's actual sky colours.
+    private func pastel(_ hex: UInt, _ amount: Double = 0.06) -> Color {
         let r = Double((hex >> 16) & 0xFF) / 255
         let g = Double((hex >> 8) & 0xFF) / 255
         let b = Double(hex & 0xFF) / 255
@@ -100,6 +100,10 @@ struct WidgetCardBackground: View {
                 .init(color: .clear, location: 0.7),
                 .init(color: .black.opacity(0.04), location: 1.0)
             ], startPoint: .top, endPoint: .bottom)
+
+            // The app's deepened-sky scrim, so the widget carries the same
+            // contrasted look as the home screen and white type reads well.
+            Color.black.opacity(0.22)
         }
         .saturation(0.96)
     }

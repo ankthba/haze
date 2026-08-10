@@ -118,9 +118,16 @@ struct MetricDetailView: View {
         }
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
-        // The sheet itself is made of the signature material: the weather
-        // screen glows through the frost instead of a second sky.
-        .presentationBackground { GlassSheetBackground() }
+        // The sheet itself is made of the signature material: the current sky
+        // glows through the frost, like a pane of glass laid over the weather.
+        .presentationBackground {
+            GlassSheetBackground {
+                SkyBackground(condition: bundle.current.condition,
+                              now: Date(),
+                              sunrise: bundle.today?.sunrise,
+                              sunset: bundle.today?.sunset)
+            }
+        }
     }
 
     // MARK: - Top bar

@@ -63,10 +63,12 @@ struct ContentView: View {
                 await viewModel.bootstrap()
             }
         }
-        // Refresh whenever the app returns to the foreground.
+        // Refresh whenever the app returns to the foreground; when showing the
+        // device location this re-resolves the location itself, so arriving in
+        // a new city never leaves yesterday's city on screen.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, viewModel.bundle != nil {
-                Task { await viewModel.reload() }
+                Task { await viewModel.refresh() }
             }
         }
         // And on a timer while it stays open (silent — no spinner).
@@ -76,7 +78,7 @@ struct ContentView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Double(viewModel.refreshMinutes) * 60))
                 guard !Task.isCancelled, viewModel.bundle != nil else { continue }
-                await viewModel.reload()
+                await viewModel.refresh()
             }
         }
         .sheet(isPresented: $showSearch) {

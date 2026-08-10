@@ -86,7 +86,21 @@ struct WeatherScreen: View {
 
             // Floating top controls, kept crisp above the blur.
             topBar
+
+            // While browsing another place, a glass panel offers the way home:
+            // the device location's weather, one tap to return.
+            if let summary = viewModel.deviceSummary, !viewModel.isShowingDeviceLocation {
+                VStack {
+                    Spacer()
+                    currentLocationPanel(summary)
+                }
+                .padding(.horizontal, 22)
+                .padding(.bottom, 10)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(response: 0.45, dampingFraction: 0.85),
+                   value: viewModel.deviceSummary == nil)
         .colorScheme(.dark)
         .sheet(item: $selectedDay) { day in
             DayDetailView(day: day,
@@ -132,6 +146,53 @@ struct WeatherScreen: View {
                            showWindCompass: viewModel.showWindCompass,
                            showSunCard: viewModel.showSunCard)
         }
+    }
+
+    /// The signature-material panel showing home's weather while away.
+    private func currentLocationPanel(_ summary: WeatherViewModel.DeviceSummary) -> some View {
+        Button {
+            Haptics.tap()
+            Task { await viewModel.useCurrentLocation() }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(summary.place.name)
+                        .font(.serif(.body, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text("Back to your location")
+                        .font(.serif(.caption, italic: true))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+
+                Spacer(minLength: 10)
+
+                Image(systemName: summary.condition.symbolName)
+                    .symbolRenderingMode(.multicolor)
+                    .font(.system(size: 20))
+
+                Text(Fmt.tempDegree(summary.temperature))
+                    .font(.serif(.title3))
+                    .foregroundStyle(.white)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(
+                GlassSurface(shape: RoundedRectangle(cornerRadius: 26, style: .continuous),
+                             blurRadius: 16)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 14, y: 5)
+            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private var topBar: some View {

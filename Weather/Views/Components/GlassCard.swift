@@ -97,28 +97,33 @@ struct GlassSurface<S: InsettableShape>: View {
     }
 }
 
-/// Full-sheet rendition of the signature material, for sub-page sheets: the
-/// screen beneath shows through a deep blur carrying the same frost, diagonal
-/// sheen, and eased bottom shade as `GlassSurface` (no rim; the sheet's own
-/// rounded edges do the clipping), plus a dark scrim so white type stays
-/// comfortably readable over whatever glows through.
-struct GlassSheetBackground: View {
+/// Full-sheet rendition of the signature material for sub-page sheets. It
+/// wraps the caller's backdrop (the current sky) in the material's frost,
+/// diagonal sheen, and eased bottom shade, so the sheet reads as a pane of
+/// glass with the sky glowing through it. Drawn inside the sheet rather than
+/// sampling what's behind it, because iOS dims the presenting screen under a
+/// sheet so heavily that a true backdrop blur just goes black.
+struct GlassSheetBackground<Background: View>: View {
+    @ViewBuilder var background: Background
+
     var body: some View {
         ZStack {
-            BackdropBlurView(radius: 18)
-
-            Color.black.opacity(0.30)
+            background
 
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .environment(\.colorScheme, .light)
-                .opacity(UIPrefs.shared.reduceTransparency ? 0.6 : 0.10)
+                .opacity(UIPrefs.shared.reduceTransparency ? 0.6 : 0.16)
 
             LinearGradient(stops: [
                 .init(color: .white.opacity(0.10), location: 0),
                 .init(color: .white.opacity(0.03), location: 0.45),
                 .init(color: .white.opacity(0.01), location: 1)
             ], startPoint: .topLeading, endPoint: .bottom)
+
+            // Readability scrim, tuned to sit near the main screen's own
+            // deepened-sky look so type contrast matches the rest of the app.
+            Color.black.opacity(0.16)
 
             LinearGradient(stops: [
                 .init(color: .clear, location: 0),

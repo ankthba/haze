@@ -95,6 +95,20 @@ final class WeatherViewModel {
     private(set) var savedPlaces: [Place] = []
     var selectedPlace: Place?
 
+    /// Whether the screen is showing the device's own location (vs. a saved
+    /// or searched place).
+    private(set) var isShowingDeviceLocation = false
+
+    /// The device location's weather, shown in the "back to your location"
+    /// panel while browsing another place.
+    struct DeviceSummary {
+        let place: Place
+        let temperature: Double
+        let condition: WeatherCondition
+        let fetchedAt: Date
+    }
+    private(set) var deviceSummary: DeviceSummary?
+
     var temperatureUnit: TemperatureUnit {
         didSet {
             guard oldValue != temperatureUnit else { return }
@@ -264,6 +278,8 @@ final class WeatherViewModel {
         phase = .loading
         do {
             let place = try await locationManager.requestCurrentPlace()
+            isShowingDeviceLocation = true
+            deviceSummary = nil
             await load(place: place, persist: false)
         } catch {
             phase = .failed(error.localizedDescription)
@@ -271,12 +287,45 @@ final class WeatherViewModel {
     }
 
     func select(_ place: Place) async {
+        isShowingDeviceLocation = false
         await load(place: place, persist: true)
+        await refreshDeviceSummary()
     }
 
     func reload() async {
         guard let place = selectedPlace else { return }
         await load(place: place, persist: false, showSpinner: bundle == nil)
+    }
+
+    /// Foreground / periodic refresh. When the screen is the device location,
+    /// re-resolve the location itself first, so moving cities never leaves the
+    /// app (or widget) showing where you used to be.
+    func refresh() async {
+        if isShowingDeviceLocation, !locationManager.isDenied {
+            await useCurrentLocation()
+        } else {
+            await reload()
+            await refreshDeviceSummary()
+        }
+    }
+
+    /// Fetch (or re-fetch) the device location's current conditions for the
+    /// return panel. Cheap single call, cached for 15 minutes, and only runs
+    /// when permission is already granted so browsing never triggers a prompt.
+    func refreshDeviceSummary() async {
+        guard !isShowingDeviceLocation else { return }
+        let status = locationManager.authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else { return }
+        if let summary = deviceSummary,
+           Date().timeIntervalSince(summary.fetchedAt) < 15 * 60 { return }
+        guard let place = try? await locationManager.requestCurrentPlace(),
+              let current = try? await weatherService.fetchCurrentSummary(
+                  for: place, temperatureUnit: temperatureUnit) else { return }
+        deviceSummary = DeviceSummary(
+            place: place,
+            temperature: current.temperature,
+            condition: WeatherCondition(code: current.code, isDay: current.isDay),
+            fetchedAt: Date())
     }
 
     private func load(place: Place, persist: Bool, showSpinner: Bool = true) async {
@@ -291,10 +340,15 @@ final class WeatherViewModel {
             )
             bundle = result
             phase = .loaded
-            WeatherWidgetSnapshot.publish(from: result,
-                                          temperatureUnit: temperatureUnit,
-                                          speedUnit: speedUnit,
-                                          precipUnit: precipUnit)
+            // Widgets follow the device location: browsing another city
+            // doesn't retarget them (unless location is unavailable, in which
+            // case they follow whatever's viewed so they're never stale).
+            if isShowingDeviceLocation || locationManager.isDenied {
+                WeatherWidgetSnapshot.publish(from: result,
+                                              temperatureUnit: temperatureUnit,
+                                              speedUnit: speedUnit,
+                                              precipUnit: precipUnit)
+            }
             if persist { addSavedPlace(result.place) }
         } catch {
             phase = .failed(error.localizedDescription)

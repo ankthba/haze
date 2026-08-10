@@ -105,6 +105,44 @@ struct WeatherService {
         }
     }
 
+    // MARK: - Current-conditions summary (for the "back to my location" panel)
+
+    struct CurrentSummary {
+        let temperature: Double
+        let code: Int
+        let isDay: Bool
+    }
+
+    /// A deliberately tiny request: current temperature + condition only, used
+    /// to show the device location's weather while browsing another place.
+    func fetchCurrentSummary(for place: Place,
+                             temperatureUnit: TemperatureUnit) async throws -> CurrentSummary {
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        components?.queryItems = [
+            .init(name: "latitude", value: String(place.latitude)),
+            .init(name: "longitude", value: String(place.longitude)),
+            .init(name: "current", value: "temperature_2m,weather_code,is_day"),
+            .init(name: "temperature_unit", value: temperatureUnit.apiValue)
+        ]
+        guard let url = components?.url else { throw WeatherError.badURL }
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw WeatherError.requestFailed
+        }
+        struct Response: Decodable {
+            struct Current: Decodable {
+                let temperature_2m: Double
+                let weather_code: Int
+                let is_day: Int
+            }
+            let current: Current
+        }
+        let decoded = try JSONDecoder().decode(Response.self, from: data)
+        return CurrentSummary(temperature: decoded.current.temperature_2m,
+                              code: decoded.current.weather_code,
+                              isDay: decoded.current.is_day == 1)
+    }
+
     // MARK: - Air quality
 
     private func fetchAirQuality(place: Place) async throws -> AirQuality? {
