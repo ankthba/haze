@@ -2,7 +2,7 @@
 //  WidgetTheme.swift
 //  WeatherWidget
 //
-//  Shared look for the widget: Instrument Serif registration + helper, and the
+//  Shared look for the widget: EB Garamond registration + helper, and the
 //  pastel "frosted card" background that mirrors the app's GlassCard so the
 //  widget reads as the same matte, dimensional surface.
 //
@@ -13,12 +13,13 @@ import CoreText
 // MARK: - Fonts
 
 enum WidgetFonts {
-    /// Register the bundled Instrument Serif faces inside the widget process so
+    /// Register the bundled EB Garamond faces inside the widget process so
     /// `Font.custom` can find them (the Info.plist is auto-generated). Tries the
     /// bundle root and a `Fonts` subdirectory so it works however the resources
     /// land in the .appex.
     static func register() {
-        for name in ["InstrumentSerif-Regular", "InstrumentSerif-Italic"] {
+        for name in ["EBGaramondLF-Regular", "EBGaramondLF-Italic",
+                     "InstrumentSerif-Regular"] {
             let url = Bundle.main.url(forResource: name, withExtension: "ttf")
                 ?? Bundle.main.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts")
             guard let url else { continue }
@@ -28,10 +29,16 @@ enum WidgetFonts {
 }
 
 extension Font {
-    /// Instrument Serif at a fixed size (falls back to the system serif if the
-    /// custom face somehow isn't registered).
-    static func instrumentSerif(_ size: CGFloat, italic: Bool = false) -> Font {
-        .custom(italic ? "InstrumentSerif-Italic" : "InstrumentSerif-Regular", size: size)
+    /// EB Garamond (lining figures) at a fixed size (falls back to the system
+    /// serif if the custom face somehow isn't registered).
+    static func serif(_ size: CGFloat, italic: Bool = false) -> Font {
+        .custom(italic ? "EBGaramondLF-Italic" : "EBGaramondLF-Regular", size: size)
+    }
+
+    /// Instrument Serif, used solely for the temperature numerals to match the
+    /// app's hero temperature.
+    static func displaySerif(_ size: CGFloat) -> Font {
+        .custom("InstrumentSerif-Regular", size: size)
     }
 }
 

@@ -41,34 +41,17 @@ struct WeatherScreen: View {
                     CurrentConditionsView(bundle: bundle, unit: viewModel.temperatureUnit)
                         .padding(.bottom, 14)
 
-                    HourlyForecastCard(bundle: bundle)
-                    // The dedicated rain card only appears when there's a real
-                    // chance today; when it does, drop the precip underlay from the
-                    // 48-hour trend so rain isn't shown twice.
-                    TemperatureTrendCard(bundle: bundle, accent: condition.accent,
-                                         showPrecip: !rainLikelyToday)
-                    if rainLikelyToday {
-                        PrecipChanceCard(bundle: bundle)
+                    ForEach(viewModel.cardOrder) { card in
+                        homeCard(card)
                     }
-                    DailyForecastCard(bundle: bundle, accent: condition.accent) { day in
-                        selectedDay = day
-                    }
-                    RadarPreviewCard(place: bundle.place,
-                                     accent: condition.accent,
-                                     isDay: bundle.current.isDay) {
-                        showRadar = true
-                    }
-                    DetailsSection(bundle: bundle,
-                                   unit: viewModel.temperatureUnit,
-                                   speedUnit: viewModel.speedUnit)
 
                     Text(Fmt.updatedStamp(bundle.fetchedAt, timezone: bundle.timezone))
-                        .font(.caption)
+                        .font(.serif(.caption))
                         .foregroundStyle(.white.opacity(0.55))
                         .padding(.top, 4)
 
-                    Text("Data from Open-Meteo — blended ECMWF, GFS & ICON models")
-                        .font(.caption2)
+                    Text("Data from Open-Meteo, blending ECMWF, GFS & ICON models")
+                        .font(.serif(.caption2))
                         .foregroundStyle(.white.opacity(0.4))
                         .padding(.bottom, 8)
                 }
@@ -95,7 +78,7 @@ struct WeatherScreen: View {
             // Content eases into a progressive blur at both screen edges: sharp in
             // the middle, dissolving softly into the status bar above and refracting
             // into the sky below (the bottom band hugs the rounded bezel corners).
-            TopScrollBlur(maxRadius: 8, height: 100)
+            TopScrollBlur(maxRadius: 8, height: 72)
                 .allowsHitTesting(false)
 
             BottomBezelBlur(maxRadius: 8, height: 96, middleDrop: 48)
@@ -110,6 +93,44 @@ struct WeatherScreen: View {
                           bundle: bundle,
                           unit: viewModel.temperatureUnit,
                           speedUnit: viewModel.speedUnit)
+        }
+    }
+
+    /// One reorderable block of the main screen, in the user's chosen order.
+    @ViewBuilder
+    private func homeCard(_ card: WeatherViewModel.HomeCard) -> some View {
+        switch card {
+        case .hourly:
+            HourlyForecastCard(bundle: bundle)
+        case .trend:
+            // The dedicated rain card rides with the trend chart; it only
+            // appears when there's a real chance today, and when it does the
+            // precip underlay is dropped from the trend so rain isn't shown twice.
+            if viewModel.showTrendCard {
+                TemperatureTrendCard(bundle: bundle, accent: condition.accent,
+                                     showPrecip: !rainLikelyToday)
+            }
+            if rainLikelyToday {
+                PrecipChanceCard(bundle: bundle)
+            }
+        case .daily:
+            DailyForecastCard(bundle: bundle, accent: condition.accent) { day in
+                selectedDay = day
+            }
+        case .radar:
+            if viewModel.showRadarPreview {
+                RadarPreviewCard(place: bundle.place,
+                                 accent: condition.accent,
+                                 isDay: bundle.current.isDay) {
+                    showRadar = true
+                }
+            }
+        case .details:
+            DetailsSection(bundle: bundle,
+                           unit: viewModel.temperatureUnit,
+                           speedUnit: viewModel.speedUnit,
+                           showWindCompass: viewModel.showWindCompass,
+                           showSunCard: viewModel.showSunCard)
         }
     }
 

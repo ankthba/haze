@@ -26,7 +26,7 @@ struct MetricTile<Detail: View>: View {
                         .foregroundStyle(.white)
                     if let unit {
                         Text(unit)
-                            .font(.system(.title3, weight: .medium))
+                            .font(.serif(.title3, weight: .medium))
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
@@ -35,7 +35,7 @@ struct MetricTile<Detail: View>: View {
 
                 if let caption {
                     Text(caption)
-                        .font(.footnote)
+                        .font(.serif(.footnote))
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }

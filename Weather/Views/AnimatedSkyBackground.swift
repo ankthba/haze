@@ -109,6 +109,12 @@ struct SkyBackground: View {
                 startPoint: .top, endPoint: .bottom
             )
             .ignoresSafeArea()
+
+            // The sky always carries a deepening scrim so white type reads
+            // comfortably (this is the app's default look); the Increase
+            // Contrast setting strengthens it further.
+            Color.black.opacity(UIPrefs.shared.increaseContrast ? 0.38 : 0.22)
+                .ignoresSafeArea()
         }
         .animation(.easeInOut(duration: 1.1), value: condition.code)
     }

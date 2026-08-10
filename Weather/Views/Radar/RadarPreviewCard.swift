@@ -40,7 +40,7 @@ struct RadarPreviewCard: View {
                         Color(hex: 0x10151E)
                         if failed {
                             Label("Radar unavailable", systemImage: "antenna.radiowaves.left.and.right.slash")
-                                .font(.footnote)
+                                .font(.serif(.footnote))
                                 .foregroundStyle(.white.opacity(0.55))
                         } else {
                             ProgressView().tint(.white.opacity(0.7))

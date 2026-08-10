@@ -15,10 +15,9 @@ struct CurrentConditionsView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text(Fmt.longDate(current.date, timezone: bundle.timezone).uppercased())
-                .font(.system(.caption, weight: .semibold))
-                .tracking(2.2)
-                .foregroundStyle(.white.opacity(0.7))
+            Text(Fmt.longDate(current.date, timezone: bundle.timezone))
+                .font(.serif(.footnote, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
                 .padding(.bottom, 2)
 
             Text(bundle.place.name)
@@ -38,11 +37,11 @@ struct CurrentConditionsView: View {
             // count toward layout width — that keeps the *number* optically
             // centered rather than the number+degree as a unit.
             Text(Fmt.temp(current.temperature))
-                .serifDisplay(116, weight: .thin)
+                .font(.displaySerif(size: 116))
                 .foregroundStyle(.white)
                 .overlay(alignment: .topTrailing) {
                     Text("°")
-                        .serifDisplay(74, weight: .thin)
+                        .font(.displaySerif(size: 74))
                         .foregroundStyle(.white)
                         .offset(x: 26, y: 8)
                 }

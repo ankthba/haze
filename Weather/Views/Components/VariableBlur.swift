@@ -116,6 +116,77 @@ final class VariableBlurUIView: UIVisualEffectView {
     }
 }
 
+/// A constant-radius blur of whatever sits behind the view, with no tint or
+/// vibrancy wash of its own. Clip it to a shape and layer the usual tints on
+/// top: the surface keeps its exact look but content behind it becomes
+/// illegible. (SwiftUI materials can't do this at partial opacity — fading a
+/// material fades its blur too.)
+struct BackdropBlurView: UIViewRepresentable {
+    var radius: CGFloat = 14
+
+    func makeUIView(context: Context) -> BackdropBlurUIView {
+        BackdropBlurUIView(radius: radius)
+    }
+
+    func updateUIView(_ uiView: BackdropBlurUIView, context: Context) {
+        uiView.update(radius: radius)
+    }
+}
+
+final class BackdropBlurUIView: UIVisualEffectView {
+    private var radius: CGFloat
+
+    init(radius: CGFloat) {
+        self.radius = radius
+        super.init(effect: UIBlurEffect(style: .regular))
+        isUserInteractionEnabled = false
+        applyFilter()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func update(radius: CGFloat) {
+        guard radius != self.radius else { return }
+        self.radius = radius
+        applyFilter()
+    }
+
+    private func applyFilter() {
+        guard
+            let filterClass = NSClassFromString("CAFilter") as? NSObject.Type,
+            let blur = filterClass.perform(NSSelectorFromString("filterWithType:"),
+                                           with: "gaussianBlur")?
+                .takeUnretainedValue() as? NSObject
+        else { return }
+
+        blur.setValue(radius, forKey: "inputRadius")
+        blur.setValue(true, forKey: "inputNormalizeEdges")
+
+        // Drive the backdrop layer with a plain gaussian and drop the tint/
+        // vibrancy subviews so only the blur remains — the caller's own tint
+        // layers sit on top unchanged.
+        if let backdropLayer = subviews.first?.layer {
+            backdropLayer.filters = [blur]
+        }
+        for subview in subviews.dropFirst() {
+            subview.alpha = 0
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard let window else { return }
+        subviews.first?.layer.setValue(window.screen.scale, forKey: "scale")
+        applyFilter()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyFilter()
+    }
+}
+
 /// A bottom-pinned progressive blur whose TOP edge curves to hug the device's
 /// rounded bottom bezels: the band is tallest at the left/right corners and dips
 /// lower (shorter) toward the horizontal center, a soft concave-up arc. The blur
@@ -150,12 +221,22 @@ struct BottomBezelBlur: View {
 /// but kept as a straight band (the notch already breaks the top symmetry).
 struct TopScrollBlur: View {
     var maxRadius: CGFloat = 8
-    var height: CGFloat = 96
+    var height: CGFloat = 72
 
     var body: some View {
         VStack(spacing: 0) {
             VariableBlurView(maxRadius: maxRadius, direction: .top)
                 .frame(height: height)
+                // Alpha-fade the band's lower third so the effect dissolves to
+                // nothing — without this the effect view's frame edge shows as
+                // a faint hard line over busy content, even with the radius ramp.
+                .mask(
+                    LinearGradient(stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.55),
+                        .init(color: .clear, location: 1)
+                    ], startPoint: .top, endPoint: .bottom)
+                )
             Spacer(minLength: 0)
         }
         .ignoresSafeArea()

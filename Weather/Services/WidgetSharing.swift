@@ -19,6 +19,14 @@ struct WeatherWidgetHour: Codable, Hashable {
     let temp: String      // "78°"
 }
 
+/// One forecast day for the large widget's outlook list.
+struct WeatherWidgetDay: Codable, Hashable {
+    let name: String      // "Today", "Tue"
+    let symbol: String    // SF Symbol name
+    let low: String       // "67°"
+    let high: String      // "88°"
+}
+
 /// Everything the widget needs to draw, baked into display-ready values.
 struct WeatherWidgetSnapshot: Codable, Hashable {
     let locationName: String
@@ -33,6 +41,8 @@ struct WeatherWidgetSnapshot: Codable, Hashable {
     let aqiText: String?          // "Air quality alert" / "Air quality · Good"
     let aqiAlert: Bool
     let hours: [WeatherWidgetHour]
+    /// Optional so snapshots cached before this field existed still decode.
+    let days: [WeatherWidgetDay]?
     let updatedAt: Date
 
     /// Shown in the widget gallery / before any real data has been written.
@@ -55,6 +65,13 @@ struct WeatherWidgetSnapshot: Codable, Hashable {
             .init(time: "2 PM", symbol: "cloud.fill", temp: "84°"),
             .init(time: "3 PM", symbol: "cloud.sun.fill", temp: "83°"),
             .init(time: "4 PM", symbol: "sun.max.fill", temp: "82°")
+        ],
+        days: [
+            .init(name: "Today", symbol: "cloud.sun.fill", low: "67°", high: "88°"),
+            .init(name: "Tue", symbol: "sun.max.fill", low: "70°", high: "90°"),
+            .init(name: "Wed", symbol: "cloud.bolt.rain.fill", low: "68°", high: "84°"),
+            .init(name: "Thu", symbol: "cloud.rain.fill", low: "65°", high: "79°"),
+            .init(name: "Fri", symbol: "cloud.sun.fill", low: "66°", high: "83°")
         ],
         updatedAt: .now)
 }
@@ -105,7 +122,8 @@ extension WeatherWidgetSnapshot {
     /// to the store and nudge WidgetKit to refresh.
     static func publish(from bundle: WeatherBundle,
                         temperatureUnit: TemperatureUnit,
-                        speedUnit: SpeedUnit) {
+                        speedUnit: SpeedUnit,
+                        precipUnit: PrecipUnit = .auto) {
         WeatherSnapshotStore.write(make(from: bundle))
         WeatherSnapshotStore.writeLocation(WidgetLocation(
             latitude: bundle.place.latitude,
@@ -114,7 +132,7 @@ extension WeatherWidgetSnapshot {
             timezone: bundle.timezone.identifier,
             temperatureUnit: temperatureUnit.apiValue,
             windSpeedUnit: speedUnit.apiValue,
-            precipitationUnit: temperatureUnit == .fahrenheit ? "inch" : "mm"))
+            precipitationUnit: precipUnit.apiValue(temperatureUnit: temperatureUnit)))
         WidgetCenter.shared.reloadTimelines(ofKind: WeatherSnapshotStore.widgetKind)
     }
 
@@ -132,6 +150,13 @@ extension WeatherWidgetSnapshot {
         let high = bundle.today.map { Fmt.tempDegree($0.tempMax) } ?? "—"
         let low = bundle.today.map { Fmt.tempDegree($0.tempMin) } ?? "—"
         let highLow = bundle.today == nil ? "" : "H:\(high)  L:\(low)"
+
+        let days = bundle.daily.prefix(6).enumerated().map { i, d in
+            WeatherWidgetDay(name: i == 0 ? "Today" : Fmt.weekday(d.date, timezone: tz),
+                             symbol: d.condition.symbolName,
+                             low: Fmt.tempDegree(d.tempMin),
+                             high: Fmt.tempDegree(d.tempMax))
+        }
 
         // Use the exact same time-of-day + condition gradient the app shows, so the
         // widget matches the background at dawn/day/dusk/night.
@@ -169,6 +194,7 @@ extension WeatherWidgetSnapshot {
             aqiText: aqiText,
             aqiAlert: aqiAlert,
             hours: Array(hours),
+            days: Array(days),
             updatedAt: bundle.fetchedAt)
     }
 }

@@ -13,6 +13,8 @@ struct DetailsSection: View {
     let bundle: WeatherBundle
     let unit: TemperatureUnit
     let speedUnit: SpeedUnit
+    var showWindCompass = true
+    var showSunCard = true
 
     @State private var selectedMetric: MetricKind?
 
@@ -22,22 +24,26 @@ struct DetailsSection: View {
     var body: some View {
         VStack(spacing: 30) {
             // Interactive feature blocks.
-            Button {
-                Haptics.tap()
-                selectedMetric = .wind(speedUnit: speedUnit)
-            } label: {
-                WindCompass(speed: current.windSpeed,
-                            gust: current.windGust,
-                            direction: current.windDirection,
-                            speedUnit: speedUnit)
+            if showWindCompass {
+                Button {
+                    Haptics.tap()
+                    selectedMetric = .wind(speedUnit: speedUnit)
+                } label: {
+                    WindCompass(speed: current.windSpeed,
+                                gust: current.windGust,
+                                direction: current.windDirection,
+                                speedUnit: speedUnit)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
 
-            SunArcCard(sunrise: today?.sunrise,
-                       sunset: today?.sunset,
-                       now: Date(),
-                       timezone: bundle.timezone)
+            if showSunCard {
+                SunArcCard(sunrise: today?.sunrise,
+                           sunset: today?.sunset,
+                           now: Date(),
+                           timezone: bundle.timezone)
+            }
 
             // Everything else as its own full-width row.
             VStack(spacing: 0) {
@@ -60,7 +66,7 @@ struct DetailsSection: View {
                           caption: "In the last hour", metric: .precipitation(unit: unit))
 
                 metricRow("gauge.with.dots.needle.bottom.50percent", "Pressure",
-                          Fmt.pressure(current.pressure), unit: "hPa",
+                          Fmt.pressure(current.pressure), unit: Fmt.pressureUnit.label,
                           caption: pressureCaption)
 
                 metricRow("cloud.fill", "Cloud Cover",
@@ -104,11 +110,11 @@ struct DetailsSection: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)
-                        .font(.system(.body, weight: .medium))
+                        .font(.serif(.body, weight: .medium))
                         .foregroundStyle(.white)
                     if let caption {
                         Text(caption)
-                            .font(.caption)
+                            .font(.serif(.caption))
                             .foregroundStyle(.white.opacity(0.55))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -123,7 +129,7 @@ struct DetailsSection: View {
                         .foregroundStyle(.white)
                     if let unit {
                         Text(unit)
-                            .font(.system(.subheadline, weight: .medium))
+                            .font(.serif(.subheadline, weight: .medium))
                             .foregroundStyle(.white.opacity(0.6))
                     }
                 }
@@ -156,9 +162,9 @@ struct DetailsSection: View {
 
     private var pressureCaption: String {
         switch current.pressure {
-        case ..<1000: return "Low — unsettled"
+        case ..<1000: return "Low, unsettled"
         case 1000..<1020: return "Steady"
-        default: return "High — fair"
+        default: return "High, fair"
         }
     }
 

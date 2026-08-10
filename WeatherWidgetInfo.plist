@@ -9,8 +9,9 @@
 	</dict>
 	<key>UIAppFonts</key>
 	<array>
+		<string>EBGaramondLF-Regular.ttf</string>
+		<string>EBGaramondLF-Italic.ttf</string>
 		<string>InstrumentSerif-Regular.ttf</string>
-		<string>InstrumentSerif-Italic.ttf</string>
 	</array>
 </dict>
 </plist>

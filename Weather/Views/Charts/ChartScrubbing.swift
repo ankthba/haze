@@ -27,12 +27,12 @@ struct ScrubReadout: View {
                 .foregroundStyle(.white)
             if let caption {
                 Text(caption)
-                    .font(.caption2)
+                    .font(.serif(.caption2))
                     .foregroundStyle(.white.opacity(0.7))
             }
             if let detail {
                 Text(detail)
-                    .font(.caption2)
+                    .font(.serif(.caption2))
                     .foregroundStyle(detailColor)
             }
         }

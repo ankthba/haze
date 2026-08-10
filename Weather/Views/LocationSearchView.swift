@@ -33,6 +33,10 @@ struct LocationSearchView: View {
                           sunset: skySunset)
 
             List {
+                // The title scrolls away with the content, like Settings,
+                // instead of staying pinned above the list.
+                titleRow
+
                 if query.isEmpty {
                     currentLocationButton
                     savedSection
@@ -42,8 +46,14 @@ struct LocationSearchView: View {
             }
             .groupedListStyle()
             .scrollContentBackground(.hidden)
-            .safeAreaInset(edge: .top) { topBar }
+            .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
             .safeAreaInset(edge: .bottom) { searchBar }
+
+            // Rows dissolve into the status bar instead of colliding with it.
+            TopScrollBlur(maxRadius: 8, height: 72)
+                .allowsHitTesting(false)
+
+            topBar
         }
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
@@ -53,29 +63,35 @@ struct LocationSearchView: View {
         }
     }
 
-    // MARK: - Top bar (title + close) and bottom search
+    // MARK: - Title, top bar (close) and bottom search
+
+    private var titleRow: some View {
+        Text("Locations")
+            .font(.serif(.largeTitle))
+            .foregroundStyle(.white)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 12, leading: 4, bottom: 6, trailing: 0))
+    }
 
     private var topBar: some View {
-        // Top-align so the close button sits in the corner at the same inset as
-        // every other sub-page, regardless of the large title's height.
-        HStack(alignment: .top) {
-            Text("Locations")
-                .font(.serif(.largeTitle))
+        VStack {
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(CardButtonStyle())
                 .foregroundStyle(.white)
-            Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 34, height: 34)
             }
-            .buttonStyle(CardButtonStyle())
-            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 18)
-        .padding(.bottom, 14)
     }
 
     private var searchBar: some View {
@@ -117,27 +133,7 @@ struct LocationSearchView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(
-            ZStack {
-                // The exact card recipe (light frosted material + white top-lit
-                // tint), but at full strength instead of the cards' 0.18 — so it
-                // tints with the time-of-day sky yet actually blurs what's behind
-                // rather than being see-through.
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .environment(\.colorScheme, .light)
-                Capsule()
-                    .fill(LinearGradient(colors: [.white.opacity(0.18), .white.opacity(0.04)],
-                                         startPoint: .top, endPoint: .bottom))
-            }
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.08)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 0.8)
-        )
+        .background(GlassSurface(shape: Capsule(), frost: 0.18, blurRadius: 14))
     }
 
     // MARK: - Sections
@@ -234,11 +230,11 @@ struct LocationSearchView: View {
                 .font(.title3)
             VStack(alignment: .leading, spacing: 2) {
                 Text(place.name)
-                    .font(.system(.body, weight: .medium))
+                    .font(.serif(.body, weight: .medium))
                     .foregroundStyle(.white)
                 if !place.subtitle.isEmpty {
                     Text(place.subtitle)
-                        .font(.caption)
+                        .font(.serif(.caption))
                         .foregroundStyle(.white.opacity(0.6))
                 }
             }

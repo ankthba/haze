@@ -21,7 +21,9 @@ struct RadarView: View {
 
     @State private var field: RadarField?
     @State private var frameIndex = 0
-    @State private var isPlaying = true
+    @State private var isPlaying =
+        (UserDefaults.standard.object(forKey: WeatherViewModel.radarAutoplayKey) as? Bool ?? true)
+        && !UserDefaults.standard.bool(forKey: UIPrefs.reduceMotionKey)
     @State private var isScrubbing = false
     @State private var dwellTicks = 0
     @State private var failed = false
@@ -77,9 +79,14 @@ struct RadarView: View {
                             text: "Loading radar…", pulse: true)
             }
 
-            // Top + bottom scrims keep the chrome legible over busy radar.
+            // Progressive blur + soft scrims keep the chrome legible over the
+            // busy map: the header text sits on genuinely blurred map, not raw
+            // streets and city labels.
+            TopScrollBlur(maxRadius: 12, height: 130)
+                .allowsHitTesting(false)
+
             VStack {
-                LinearGradient(colors: [.black.opacity(0.55), .clear],
+                LinearGradient(colors: [.black.opacity(0.45), .clear],
                                startPoint: .top, endPoint: .bottom)
                     .frame(height: 160)
                 Spacer()
@@ -143,7 +150,7 @@ struct RadarView: View {
                         .foregroundStyle(.white)
                         .contentTransition(.numericText())
                     Text(relativeLabel(for: frame))
-                        .font(.system(.footnote, weight: .medium))
+                        .font(.serif(.footnote, weight: .medium))
                         .tracking(0.5)
                         .foregroundStyle(frame.isForecast ? accent : .white.opacity(0.55))
                 }
@@ -173,13 +180,8 @@ struct RadarView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .environment(\.colorScheme, .dark)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.8)
-                )
+            GlassSurface(shape: RoundedRectangle(cornerRadius: 26, style: .continuous),
+                         blurRadius: 16)
         )
     }
 
@@ -221,12 +223,12 @@ struct RadarView: View {
         }
     }
 
-    /// "NOW", "1 HR AGO", "+3 HR" relative to the present moment.
+    /// "Now", "1 hr ago", "+3 hr" relative to the present moment.
     private func relativeLabel(for frame: RadarFrame) -> String {
         let minutes = Int((frame.time.timeIntervalSinceNow / 60).rounded())
-        if abs(minutes) <= 30 { return "NOW" }
+        if abs(minutes) <= 30 { return "Now" }
         let hours = Int((Double(minutes) / 60).rounded())
-        return hours < 0 ? "\(-hours) HR AGO" : "+\(hours) HR"
+        return hours < 0 ? "\(-hours) hr ago" : "+\(hours) hr"
     }
 }
 
@@ -319,10 +321,9 @@ private struct IntensityLegend: View {
             )
             .frame(width: 92, height: 5)
             .clipShape(Capsule())
-            Text("LIGHT · HEAVY")
-                .font(.system(size: 8.5, weight: .medium))
-                .tracking(1.2)
-                .foregroundStyle(.white.opacity(0.5))
+            Text("Light · Heavy")
+                .font(.serif(size: 11, weight: .medium))
+                .foregroundStyle(.white.opacity(0.6))
         }
     }
 }
@@ -335,12 +336,13 @@ private struct PulsingIcon: View {
     @State private var on = false
 
     var body: some View {
+        let animate = active && !UIPrefs.shared.reduceMotion
         Image(systemName: systemName)
             .font(.system(size: 40))
             .foregroundStyle(.white.opacity(0.85))
-            .scaleEffect(on ? 1.08 : 0.92)
-            .opacity(on ? 1 : 0.7)
-            .animation(active ? .easeInOut(duration: 1).repeatForever(autoreverses: true) : .default,
+            .scaleEffect(animate && on ? 1.08 : 0.92)
+            .opacity(animate && on ? 1 : 0.7)
+            .animation(animate ? .easeInOut(duration: 1).repeatForever(autoreverses: true) : .default,
                        value: on)
             .onAppear { if active { on = true } }
     }

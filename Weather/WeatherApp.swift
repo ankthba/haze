@@ -18,10 +18,12 @@ struct WeatherApp: App {
         }
     }
 
-    /// Register the bundled Instrument Serif faces so `Font.custom` can find them
+    /// Register the bundled serif faces so `Font.custom` can find them
     /// (the Info.plist is auto-generated, so we register at runtime instead).
     private static func registerFonts() {
-        for name in ["InstrumentSerif-Regular", "InstrumentSerif-Italic"] {
+        for name in ["EBGaramondLF-Regular", "EBGaramondLF-Italic",
+                     "EBGaramondLF-Medium", "EBGaramondLF-SemiBold",
+                     "InstrumentSerif-Regular"] {
             guard let url = Bundle.main.url(forResource: name, withExtension: "ttf") else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }

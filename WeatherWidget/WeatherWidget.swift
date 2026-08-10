@@ -61,7 +61,7 @@ struct WeatherWidget: Widget {
         }
         .configurationDisplayName("Haze")
         .description("Your local forecast at a glance.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
     }
 }
@@ -73,6 +73,7 @@ struct WeatherWidgetEntryView: View {
     var body: some View {
         switch family {
         case .systemSmall: SmallWidgetView(snapshot: snapshot)
+        case .systemLarge: LargeWidgetView(snapshot: snapshot)
         default:           MediumWidgetView(snapshot: snapshot)
         }
     }
@@ -121,10 +122,10 @@ private struct TemperatureText: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             Text(number)
-                .font(.instrumentSerif(size))
+                .font(.displaySerif(size))
             if hasDegree {
                 Text("°")
-                    .font(.instrumentSerif(size * 0.58))
+                    .font(.displaySerif(size * 0.58))
                     .baselineOffset(size * 0.16)
             }
         }
@@ -150,7 +151,7 @@ private struct HourCell: View {
                 .font(.system(size: 18))
                 .frame(height: 20)
             Text(hour.temp)
-                .font(.instrumentSerif(16))
+                .font(.serif(16))
                 .foregroundStyle(.white)
         }
         .frame(maxWidth: .infinity)
@@ -177,7 +178,7 @@ private struct SmallWidgetView: View {
             Spacer(minLength: 6)
 
             Text(snapshot.conditionText)
-                .font(.instrumentSerif(15))
+                .font(.serif(15))
                 .foregroundStyle(.white.opacity(0.9))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -204,7 +205,7 @@ private struct MediumWidgetView: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.68))
             Text(value)
-                .font(.instrumentSerif(15))
+                .font(.serif(15))
                 .foregroundStyle(.white.opacity(0.92))
         }
         .fixedSize()
@@ -227,7 +228,7 @@ private struct MediumWidgetView: View {
                         highLow("arrow.down", snapshot.lowText)
                     }
                     Text(snapshot.locationName)
-                        .font(.instrumentSerif(14, italic: true))
+                        .font(.serif(14, italic: true))
                         .foregroundStyle(.white.opacity(0.88))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -253,9 +254,86 @@ private struct MediumWidgetView: View {
     }
 }
 
+// MARK: - Large
+
+private struct LargeWidgetView: View {
+    let snapshot: WeatherWidgetSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: temperature + condition on the left, glyph + location right.
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    TemperatureText(text: snapshot.temperatureText, size: 58)
+                    Text(snapshot.conditionText)
+                        .font(.serif(16, italic: true))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 6) {
+                    ConditionGlyph(symbol: snapshot.conditionSymbol, size: 34)
+                    LocationLabel(name: snapshot.locationName, size: 12)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            // Hourly strip.
+            HStack(spacing: 0) {
+                ForEach(snapshot.hours.prefix(6), id: \.self) { HourCell(hour: $0) }
+            }
+
+            Spacer(minLength: 12)
+
+            // Daily outlook, hairline-separated like the app's 10-day list.
+            VStack(spacing: 0) {
+                ForEach(Array((snapshot.days ?? []).prefix(5).enumerated()),
+                        id: \.element) { index, day in
+                    if index > 0 {
+                        Divider().overlay(.white.opacity(0.14))
+                    }
+                    HStack(spacing: 8) {
+                        Text(day.name)
+                            .font(.serif(15))
+                            .foregroundStyle(.white)
+                            .frame(width: 62, alignment: .leading)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: day.symbol)
+                            .symbolRenderingMode(.multicolor)
+                            .font(.system(size: 15))
+                            .frame(width: 24)
+                        Spacer(minLength: 0)
+                        Text(day.low)
+                            .font(.serif(15))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .frame(width: 40, alignment: .trailing)
+                        Text(day.high)
+                            .font(.serif(15))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                    .frame(maxHeight: .infinity)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 // MARK: - Preview
 
 #Preview(as: .systemMedium) {
+    WeatherWidget()
+} timeline: {
+    WeatherEntry(date: .now, snapshot: .placeholder)
+}
+
+#Preview(as: .systemLarge) {
     WeatherWidget()
 } timeline: {
     WeatherEntry(date: .now, snapshot: .placeholder)

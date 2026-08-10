@@ -32,10 +32,12 @@ struct WeatherService {
 
     func fetch(for place: Place,
                temperatureUnit: TemperatureUnit,
-               speedUnit: SpeedUnit) async throws -> WeatherBundle {
+               speedUnit: SpeedUnit,
+               precipUnit: PrecipUnit = .auto) async throws -> WeatherBundle {
         async let forecast = fetchForecast(place: place,
                                            temperatureUnit: temperatureUnit,
-                                           speedUnit: speedUnit)
+                                           speedUnit: speedUnit,
+                                           precipUnit: precipUnit)
         async let air = try? fetchAirQuality(place: place)
         let (raw, tz) = try await forecast
         let aqi = await air ?? nil
@@ -46,7 +48,8 @@ struct WeatherService {
 
     private func fetchForecast(place: Place,
                                temperatureUnit: TemperatureUnit,
-                               speedUnit: SpeedUnit) async throws -> (ForecastResponse, TimeZone) {
+                               speedUnit: SpeedUnit,
+                               precipUnit: PrecipUnit) async throws -> (ForecastResponse, TimeZone) {
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
             .init(name: "latitude", value: String(place.latitude)),
@@ -71,7 +74,7 @@ struct WeatherService {
             ].joined(separator: ",")),
             .init(name: "temperature_unit", value: temperatureUnit.apiValue),
             .init(name: "wind_speed_unit", value: speedUnit.apiValue),
-            .init(name: "precipitation_unit", value: temperatureUnit == .fahrenheit ? "inch" : "mm"),
+            .init(name: "precipitation_unit", value: precipUnit.apiValue(temperatureUnit: temperatureUnit)),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "10")
         ]

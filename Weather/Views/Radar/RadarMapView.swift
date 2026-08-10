@@ -74,8 +74,15 @@ struct RadarMapView: UIViewRepresentable {
         private let tileAlpha: CGFloat
         private var token: String?
         private var frames: [RadarFrame] = []
-        private var queue: [MKTileOverlay] = []   // oldest → newest, capped at 2
-        private var shownTemplate: String?
+        /// One persistent overlay per frame, all added the moment the field
+        /// arrives — the locked camera means each frame is only a handful of
+        /// tiles, and preloading them all is what makes playback and scrubbing
+        /// flicker-free. Overlays are never removed (removal cancels in-flight
+        /// tile loads and used to leave the map blank after a manual scrub);
+        /// visibility is flipped purely via renderer alpha.
+        private var overlays: [Int: MKTileOverlay] = [:]
+        private var currentIndex = -1
+        private var previousIndex = -1
 
         init(tileAlpha: CGFloat) { self.tileAlpha = tileAlpha }
 
@@ -85,31 +92,49 @@ struct RadarMapView: UIViewRepresentable {
                 token = field.token
                 frames = field.frames
                 map.removeOverlays(map.overlays.filter { $0 is MKTileOverlay })
-                queue.removeAll()
-                shownTemplate = nil
+                overlays.removeAll()
+                currentIndex = -1
+                previousIndex = -1
+
+                // Add every frame's overlay now (alpha 0) so all tiles start
+                // caching immediately instead of on first visit.
+                for (i, frame) in frames.enumerated() {
+                    let overlay = MKTileOverlay(urlTemplate: frame.urlTemplate)
+                    overlay.canReplaceMapContent = false
+                    overlay.tileSize = CGSize(width: 256, height: 256)
+                    overlay.minimumZ = 1
+                    overlay.maximumZ = 10
+                    overlays[i] = overlay
+                    map.addOverlay(overlay, level: .aboveLabels)
+                }
             }
-            guard frames.indices.contains(index) else { return }
-            show(frames[index].urlTemplate, on: map)
+            guard frames.indices.contains(index), index != currentIndex else { return }
+            previousIndex = currentIndex
+            currentIndex = index
+            applyAlphas(on: map)
         }
 
-        private func show(_ template: String, on map: MKMapView) {
-            guard template != shownTemplate else { return }
-            shownTemplate = template
+        /// The current frame draws at full strength; the frame we just left
+        /// stays at full strength *beneath* it so radar echoes never blink out
+        /// while the new frame's tiles finish painting. Everything else is
+        /// transparent but stays cached.
+        private func applyAlphas(on map: MKMapView) {
+            for (index, overlay) in overlays {
+                guard let renderer = map.renderer(for: overlay) as? MKTileOverlayRenderer else { continue }
+                renderer.alpha = alpha(for: index)
+            }
+        }
 
-            let overlay = MKTileOverlay(urlTemplate: template)
-            overlay.canReplaceMapContent = false
-            overlay.tileSize = CGSize(width: 256, height: 256)
-            overlay.minimumZ = 1
-            overlay.maximumZ = 10
-            map.addOverlay(overlay, level: .aboveLabels)
-            queue.append(overlay)
-            while queue.count > 2 { map.removeOverlay(queue.removeFirst()) }
+        private func alpha(for index: Int) -> CGFloat {
+            if index == currentIndex || index == previousIndex { return tileAlpha }
+            return 0
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let tile = overlay as? MKTileOverlay {
                 let renderer = MKTileOverlayRenderer(tileOverlay: tile)
-                renderer.alpha = tileAlpha
+                let index = overlays.first(where: { $0.value === tile })?.key
+                renderer.alpha = index.map(alpha(for:)) ?? tileAlpha
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)

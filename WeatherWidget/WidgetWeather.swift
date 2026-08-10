@@ -48,10 +48,10 @@ enum WidgetWeatherFetcher {
             .init(name: "longitude", value: String(loc.longitude)),
             .init(name: "current", value: "temperature_2m,weather_code,is_day"),
             .init(name: "hourly", value: "temperature_2m,weather_code,is_day"),
-            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,sunrise,sunset"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset"),
             .init(name: "temperature_unit", value: loc.temperatureUnit),
             .init(name: "timezone", value: "auto"),
-            .init(name: "forecast_days", value: "2")
+            .init(name: "forecast_days", value: "7")
         ]
         guard let url = components?.url else { return nil }
         do {
@@ -85,8 +85,10 @@ enum WidgetWeatherFetcher {
             let is_day: [Int]
         }
         struct Daily: Decodable {
+            let time: [String]
             let temperature_2m_max: [Double]
             let temperature_2m_min: [Double]
+            let weather_code: [Int]
             let sunrise: [String]
             let sunset: [String]
         }
@@ -130,6 +132,27 @@ enum WidgetWeatherFetcher {
         let sunset = r.daily.sunset.first.flatMap { parser.date(from: $0) }
         let phase = WidgetSky.phase(now: now, sunrise: sunrise, sunset: sunset, isDay: isDay)
 
+        // Daily outlook for the large widget.
+        let dayParser = DateFormatter()
+        dayParser.locale = Locale(identifier: "en_US_POSIX")
+        dayParser.timeZone = tz
+        dayParser.dateFormat = "yyyy-MM-dd"
+        let weekdayFmt = DateFormatter()
+        weekdayFmt.locale = .current
+        weekdayFmt.timeZone = tz
+        weekdayFmt.dateFormat = "EEE"
+
+        var days: [WeatherWidgetDay] = []
+        for i in r.daily.time.indices.prefix(6) {
+            let name = i == 0 ? "Today"
+                : dayParser.date(from: r.daily.time[i]).map { weekdayFmt.string(from: $0) } ?? "—"
+            days.append(WeatherWidgetDay(
+                name: name,
+                symbol: WidgetConditions.symbol(code: r.daily.weather_code[safe: i] ?? 0, isDay: true),
+                low: degree(r.daily.temperature_2m_min[safe: i] ?? 0),
+                high: degree(r.daily.temperature_2m_max[safe: i] ?? 0)))
+        }
+
         return WeatherWidgetSnapshot(
             locationName: loc.name,
             temperatureText: temperatureText,
@@ -143,6 +166,7 @@ enum WidgetWeatherFetcher {
             aqiText: nil,
             aqiAlert: false,
             hours: hours,
+            days: days,
             updatedAt: now)
     }
 

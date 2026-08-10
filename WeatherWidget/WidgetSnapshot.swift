@@ -16,6 +16,13 @@ struct WeatherWidgetHour: Codable, Hashable {
     let temp: String
 }
 
+struct WeatherWidgetDay: Codable, Hashable {
+    let name: String
+    let symbol: String
+    let low: String
+    let high: String
+}
+
 struct WeatherWidgetSnapshot: Codable, Hashable {
     let locationName: String
     let temperatureText: String
@@ -29,6 +36,8 @@ struct WeatherWidgetSnapshot: Codable, Hashable {
     let aqiText: String?
     let aqiAlert: Bool
     let hours: [WeatherWidgetHour]
+    /// Optional so snapshots cached before this field existed still decode.
+    let days: [WeatherWidgetDay]?
     let updatedAt: Date
 
     static let placeholder = WeatherWidgetSnapshot(
@@ -50,6 +59,13 @@ struct WeatherWidgetSnapshot: Codable, Hashable {
             .init(time: "2 PM", symbol: "cloud.fill", temp: "84°"),
             .init(time: "3 PM", symbol: "cloud.sun.fill", temp: "83°"),
             .init(time: "4 PM", symbol: "sun.max.fill", temp: "82°")
+        ],
+        days: [
+            .init(name: "Today", symbol: "cloud.sun.fill", low: "67°", high: "88°"),
+            .init(name: "Tue", symbol: "sun.max.fill", low: "70°", high: "90°"),
+            .init(name: "Wed", symbol: "cloud.bolt.rain.fill", low: "68°", high: "84°"),
+            .init(name: "Thu", symbol: "cloud.rain.fill", low: "65°", high: "79°"),
+            .init(name: "Fri", symbol: "cloud.sun.fill", low: "66°", high: "83°")
         ],
         updatedAt: .now)
 }

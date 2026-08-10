@@ -29,12 +29,12 @@ struct AirQualityCard: View {
                         .font(.serif(.title))
                         .foregroundStyle(.white)
                     Text("US AQI")
-                        .font(.system(.subheadline, weight: .medium))
+                        .font(.serif(.subheadline, weight: .medium))
                         .foregroundStyle(.white.opacity(0.6))
                 }
 
                 Text(airQuality.category.rawValue)
-                    .font(.system(.subheadline, weight: .semibold))
+                    .font(.serif(.subheadline, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
 
                 GeometryReader { geo in
@@ -56,7 +56,7 @@ struct AirQualityCard: View {
 
                 if let pm25 = airQuality.pm25 {
                     Text("PM2.5  \(String(format: "%.0f", pm25)) µg/m³")
-                        .font(.footnote)
+                        .font(.serif(.footnote))
                         .foregroundStyle(.white.opacity(0.65))
                 }
             }

@@ -95,11 +95,6 @@ struct MetricDetailView: View {
 
     var body: some View {
         ZStack {
-            SkyBackground(condition: bundle.current.condition,
-                          now: Date(),
-                          sunrise: bundle.today?.sunrise,
-                          sunset: bundle.today?.sunset)
-
             ScrollView {
                 VStack(spacing: 20) {
                     header
@@ -113,39 +108,49 @@ struct MetricDetailView: View {
                 .padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)
-            .safeAreaInset(edge: .top) { topBar }
+            .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+
+            // Content dissolves into the status bar instead of colliding with it.
+            TopScrollBlur(maxRadius: 8, height: 72)
+                .allowsHitTesting(false)
+
+            topBar
         }
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
-        .presentationBackground(.clear)
+        // The sheet itself is made of the signature material: the weather
+        // screen glows through the frost instead of a second sky.
+        .presentationBackground { GlassSheetBackground() }
     }
 
     // MARK: - Top bar
 
     private var topBar: some View {
-        HStack {
-            Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 34, height: 34)
+        VStack {
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(CardButtonStyle())
+                .foregroundStyle(.white)
             }
-            .buttonStyle(CardButtonStyle())
-            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 18)
     }
 
     // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 6) {
-            Text("NEXT 24 HOURS")
-                .font(.system(.caption, weight: .semibold))
-                .tracking(2.2)
+            Text("Next 24 hours")
+                .font(.serif(.footnote, weight: .medium))
                 .foregroundStyle(.white.opacity(0.7))
 
             Image(systemName: metric.symbol)
@@ -257,7 +262,7 @@ struct MetricDetailView: View {
                 AxisValueLabel {
                     if let v = value.as(Double.self) {
                         Text(metric.format(v))
-                            .font(.caption2)
+                            .font(.serif(.caption2))
                             .foregroundStyle(.white.opacity(0.6))
                     }
                 }
@@ -269,7 +274,7 @@ struct MetricDetailView: View {
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(Fmt.hour(date, timezone: timezone))
-                            .font(.caption2)
+                            .font(.serif(.caption2))
                             .foregroundStyle(.white.opacity(0.6))
                     }
                 }
@@ -305,7 +310,7 @@ struct MetricDetailView: View {
                         ForEach(hours) { hour in
                             VStack(spacing: 7) {
                                 Text(Fmt.hour(hour.date, timezone: timezone))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
 
                                 Image(systemName: "arrow.up")
@@ -320,11 +325,11 @@ struct MetricDetailView: View {
                                     .frame(height: 22)
 
                                 Text(Fmt.windDirectionLabel(hour.windDirection))
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.serif(size: 13, weight: .semibold))
                                     .foregroundStyle(.white.opacity(0.85))
 
                                 Text(Fmt.speed(hour.windSpeed))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.55))
                             }
                         }
@@ -334,7 +339,7 @@ struct MetricDetailView: View {
                 .horizontalFadeEdges()
 
                 Text("Arrows show the way the wind blows.")
-                    .font(.caption)
+                    .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.6))
             }
         }
@@ -358,9 +363,8 @@ struct MetricDetailView: View {
 
     private func stat(_ label: String, _ value: Double) -> some View {
         VStack(spacing: 3) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(1.2)
+            Text(label)
+                .font(.serif(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.55))
             Text(metric.format(value))
                 .font(.serif(.title3))

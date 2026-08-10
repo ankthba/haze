@@ -42,7 +42,7 @@ struct WindCompass: View {
     private func reading(title: String, value: String, unitless: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title)
-                .font(.system(.caption, weight: .medium))
+                .font(.serif(.caption, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
                 .frame(width: 44, alignment: .leading)
             Text(value)
@@ -50,7 +50,7 @@ struct WindCompass: View {
                 .foregroundStyle(.white)
             if !unitless {
                 Text(speedUnit.label)
-                    .font(.caption2)
+                    .font(.serif(.caption2))
                     .foregroundStyle(.white.opacity(0.6))
             }
         }
@@ -69,17 +69,17 @@ struct WindCompass: View {
             }
 
             VStack {
-                Text("N").font(.system(size: 10, weight: .bold))
+                Text("N").font(.serif(size: 12, weight: .bold))
                 Spacer()
-                Text("S").font(.system(size: 10, weight: .semibold))
+                Text("S").font(.serif(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white.opacity(0.7))
             .frame(height: 74)
 
             HStack {
-                Text("W").font(.system(size: 10, weight: .semibold))
+                Text("W").font(.serif(size: 12, weight: .semibold))
                 Spacer()
-                Text("E").font(.system(size: 10, weight: .semibold))
+                Text("E").font(.serif(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white.opacity(0.7))
             .frame(width: 74)
@@ -97,9 +97,9 @@ struct WindCompass: View {
 
             VStack(spacing: 0) {
                 Text(Fmt.speed(speed))
-                    .font(.serif(size: 18))
+                    .font(.serif(size: 20))
                 Text(speedUnit.label)
-                    .font(.system(size: 9))
+                    .font(.serif(size: 12))
                     .foregroundStyle(.white.opacity(0.6))
             }
             .foregroundStyle(.white)

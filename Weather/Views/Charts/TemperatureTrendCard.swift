@@ -120,7 +120,7 @@ struct TemperatureTrendCard: View {
                         AxisValueLabel {
                             if let t = value.as(Double.self) {
                                 Text(Fmt.tempDegree(t))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -132,7 +132,7 @@ struct TemperatureTrendCard: View {
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(Fmt.hour(date, timezone: bundle.timezone))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }

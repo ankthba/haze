@@ -62,7 +62,7 @@ struct PrecipChanceCard: View {
                         AxisValueLabel {
                             if let p = value.as(Int.self) {
                                 Text("\(p)%")
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -74,7 +74,7 @@ struct PrecipChanceCard: View {
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(Fmt.hour(date, timezone: bundle.timezone))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -85,7 +85,7 @@ struct PrecipChanceCard: View {
 
                 Text(peak < 5 ? "Dry through the next 24 hours"
                               : "Peak \(Fmt.percent(peak)) chance over the next 24 hours")
-                    .font(.caption)
+                    .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.6))
             }
         }

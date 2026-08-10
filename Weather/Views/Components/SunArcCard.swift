@@ -149,10 +149,10 @@ struct SunArcCard: View {
     private func label(_ title: String, _ date: Date?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption2)
+                .font(.serif(.caption2))
                 .foregroundStyle(.white.opacity(0.6))
             Text(date.map { Fmt.time($0, timezone: timezone) } ?? "—")
-                .font(.system(.subheadline, weight: .semibold))
+                .font(.serif(.subheadline, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))
         }
     }

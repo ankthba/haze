@@ -56,7 +56,13 @@ struct DayDetailView: View {
                 .padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)
-            .safeAreaInset(edge: .top) { topBar }
+            .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+
+            // Content dissolves into the status bar instead of colliding with it.
+            TopScrollBlur(maxRadius: 8, height: 72)
+                .allowsHitTesting(false)
+
+            topBar
         }
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
@@ -66,29 +72,31 @@ struct DayDetailView: View {
     // MARK: - Top bar
 
     private var topBar: some View {
-        HStack {
-            Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 34, height: 34)
+        VStack {
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(CardButtonStyle())
+                .foregroundStyle(.white)
             }
-            .buttonStyle(CardButtonStyle())
-            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 18)
     }
 
     // MARK: - Header
 
     private var header: some View {
         VStack(spacing: 6) {
-            Text(Fmt.longDate(day.date, timezone: timezone).uppercased())
-                .font(.system(.caption, weight: .semibold))
-                .tracking(2.2)
+            Text(Fmt.longDate(day.date, timezone: timezone))
+                .font(.serif(.footnote, weight: .medium))
                 .foregroundStyle(.white.opacity(0.7))
 
             Image(systemName: day.condition.symbolName)
@@ -184,7 +192,7 @@ struct DayDetailView: View {
                         AxisValueLabel {
                             if let t = value.as(Double.self) {
                                 Text(Fmt.tempDegree(t))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -196,7 +204,7 @@ struct DayDetailView: View {
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(Fmt.hour(date, timezone: timezone))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -254,7 +262,7 @@ struct DayDetailView: View {
                         AxisValueLabel {
                             if let p = value.as(Int.self) {
                                 Text("\(p)%")
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -266,7 +274,7 @@ struct DayDetailView: View {
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(Fmt.hour(date, timezone: timezone))
-                                    .font(.caption2)
+                                    .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
@@ -277,11 +285,11 @@ struct DayDetailView: View {
 
                 if precipTotal > 0 {
                     Text("\(Fmt.precip(precipTotal, unit: unit)) expected total")
-                        .font(.caption)
+                        .font(.serif(.caption))
                         .foregroundStyle(.white.opacity(0.6))
                 } else {
                     Text("No precipitation expected")
-                        .font(.caption)
+                        .font(.serif(.caption))
                         .foregroundStyle(.white.opacity(0.6))
                 }
             }
@@ -298,7 +306,7 @@ struct DayDetailView: View {
                         ForEach(hours) { hour in
                             VStack(spacing: 10) {
                                 Text(Fmt.hour(hour.date, timezone: timezone))
-                                    .font(.system(.subheadline, weight: .semibold))
+                                    .font(.serif(.subheadline, weight: .semibold))
                                     .foregroundStyle(.white.opacity(0.8))
                                 Image(systemName: hour.condition.symbolName)
                                     .symbolRenderingMode(.multicolor)
@@ -306,10 +314,10 @@ struct DayDetailView: View {
                                     .frame(height: 24)
                                 if hour.precipitationProbability >= 10 {
                                     Text(Fmt.percent(hour.precipitationProbability))
-                                        .font(.system(size: 11, weight: .semibold))
+                                        .font(.serif(size: 13, weight: .semibold))
                                         .foregroundStyle(Color(hex: 0x9FD6FF))
                                 } else {
-                                    Text(" ").font(.system(size: 11, weight: .semibold))
+                                    Text(" ").font(.serif(size: 13, weight: .semibold))
                                 }
                                 Text(Fmt.tempDegree(hour.temperature))
                                     .font(.serif(.title3))
@@ -381,11 +389,11 @@ private struct DayMetricsGrid: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
                 Text(label)
-                    .font(.system(.body, weight: .medium))
+                    .font(.serif(.body, weight: .medium))
                     .foregroundStyle(.white)
                 if let caption {
                     Text(caption)
-                        .font(.caption)
+                        .font(.serif(.caption))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -398,7 +406,7 @@ private struct DayMetricsGrid: View {
                     .foregroundStyle(.white)
                 if let unit {
                     Text(unit)
-                        .font(.system(.subheadline, weight: .medium))
+                        .font(.serif(.subheadline, weight: .medium))
                         .foregroundStyle(.white.opacity(0.6))
                 }
             }

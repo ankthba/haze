@@ -41,7 +41,7 @@ private struct HourColumn: View {
     var body: some View {
         VStack(spacing: 10) {
             Text(isNow ? "Now" : Fmt.hour(hour.date, timezone: timezone))
-                .font(.system(.subheadline, weight: .semibold))
+                .font(.serif(.subheadline, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.8))
 
             Image(systemName: hour.condition.symbolName)
@@ -51,11 +51,11 @@ private struct HourColumn: View {
 
             if hour.precipitationProbability >= 10 {
                 Text(Fmt.percent(hour.precipitationProbability))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.serif(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: 0x9FD6FF))
             } else {
                 Text(" ")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.serif(size: 13, weight: .semibold))
             }
 
             Text(Fmt.tempDegree(hour.temperature))

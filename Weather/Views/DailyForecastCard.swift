@@ -73,7 +73,7 @@ private struct DayRow: View {
                     .foregroundStyle(.white)
                 if day.precipitationProbabilityMax >= 20 {
                     Text(Fmt.percent(day.precipitationProbabilityMax))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.serif(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x9FD6FF))
                 }
             }
