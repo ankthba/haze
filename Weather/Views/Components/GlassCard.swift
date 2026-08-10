@@ -97,46 +97,11 @@ struct GlassSurface<S: InsettableShape>: View {
     }
 }
 
-/// Full-sheet rendition of the signature material for sub-page sheets. It
-/// wraps the caller's backdrop (the current sky) in the material's frost,
-/// diagonal sheen, and eased bottom shade, so the sheet reads as a pane of
-/// glass with the sky glowing through it. Drawn inside the sheet rather than
-/// sampling what's behind it, because iOS dims the presenting screen under a
-/// sheet so heavily that a true backdrop blur just goes black.
-struct GlassSheetBackground<Background: View>: View {
-    @ViewBuilder var background: Background
-
-    var body: some View {
-        ZStack {
-            background
-
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .environment(\.colorScheme, .light)
-                .opacity(UIPrefs.shared.reduceTransparency ? 0.6 : 0.16)
-
-            LinearGradient(stops: [
-                .init(color: .white.opacity(0.10), location: 0),
-                .init(color: .white.opacity(0.03), location: 0.45),
-                .init(color: .white.opacity(0.01), location: 1)
-            ], startPoint: .topLeading, endPoint: .bottom)
-
-            // Readability scrim, tuned to sit near the main screen's own
-            // deepened-sky look so type contrast matches the rest of the app.
-            Color.black.opacity(0.16)
-
-            LinearGradient(stops: [
-                .init(color: .clear, location: 0),
-                .init(color: .clear, location: 0.5),
-                .init(color: .black.opacity(0.008), location: 0.64),
-                .init(color: .black.opacity(0.025), location: 0.76),
-                .init(color: .black.opacity(0.05), location: 0.88),
-                .init(color: .black.opacity(0.08), location: 1)
-            ], startPoint: .top, endPoint: .bottom)
-        }
-        .ignoresSafeArea()
-    }
-}
+// NOTE: Sub-page sheets draw their own SkyBackground over a clear
+// presentation background. Do not attempt a translucent blur tray: neither
+// custom effect views nor hand-stacked materials can sample the screen
+// behind a sheet (they render detached and fall back to opaque grey), and
+// the system's Liquid Glass alternative was rejected for the app's design.
 
 /// Circular icon button finished in the same frosted card material — a frosted
 /// base, a top-lit white tint, and a gradient rim-light — so the top-bar controls

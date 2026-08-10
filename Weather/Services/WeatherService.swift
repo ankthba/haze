@@ -39,9 +39,15 @@ struct WeatherService {
                                            speedUnit: speedUnit,
                                            precipUnit: precipUnit)
         async let air = try? fetchAirQuality(place: place)
+        // Real station observation (US): forecast models routinely miss a storm
+        // that's overhead *right now*, so an observed active-weather condition
+        // overrides the modeled current code.
+        async let observed = fetchObservedCode(place: place)
         let (raw, tz) = try await forecast
         let aqi = await air ?? nil
-        return try transform(raw: raw, place: place, timezone: tz, airQuality: aqi)
+        let observedCode = await observed
+        return try transform(raw: raw, place: place, timezone: tz,
+                             airQuality: aqi, observedCode: observedCode)
     }
 
     // MARK: - Forecast
@@ -143,6 +149,103 @@ struct WeatherService {
                               isDay: decoded.current.is_day == 1)
     }
 
+    // MARK: - Station observations (NWS, US only)
+
+    /// Caches each location's nearest-station observations URL so repeat loads
+    /// cost one request instead of three.
+    private actor StationCache {
+        private var map: [String: String] = [:]
+        func url(for key: String) -> String? { map[key] }
+        func set(_ url: String, for key: String) { map[key] = url }
+    }
+    private static let stationCache = StationCache()
+
+    /// The latest real observation near the place, mapped to a WMO-style code.
+    /// Returns nil outside the US, on any failure, when the report is stale,
+    /// or when it shows nothing *active* (clear/cloudy states stay with the
+    /// model, which judges cloud cover better than a single station).
+    private func fetchObservedCode(place: Place) async -> Int? {
+        let cc = place.countryCode?.uppercased()
+        guard cc == nil || cc == "US" else { return nil }
+
+        let key = String(format: "%.2f,%.2f", place.latitude, place.longitude)
+        var obsURLString = await Self.stationCache.url(for: key)
+
+        if obsURLString == nil {
+            struct Points: Decodable {
+                struct Props: Decodable { let observationStations: String }
+                let properties: Props
+            }
+            struct Stations: Decodable {
+                struct Feature: Decodable { let id: String }
+                let features: [Feature]
+            }
+            guard let pointsURL = URL(string:
+                    "https://api.weather.gov/points/\(place.latitude),\(place.longitude)"),
+                  let points: Points = await getNWS(pointsURL),
+                  let stationsURL = URL(string: points.properties.observationStations),
+                  let stations: Stations = await getNWS(stationsURL),
+                  let station = stations.features.first
+            else { return nil }
+            obsURLString = station.id + "/observations/latest"
+            await Self.stationCache.set(obsURLString!, for: key)
+        }
+
+        struct Observation: Decodable {
+            struct Props: Decodable {
+                let timestamp: String
+                let textDescription: String?
+            }
+            let properties: Props
+        }
+        guard let obsURL = URL(string: obsURLString!),
+              let observation: Observation = await getNWS(obsURL)
+        else { return nil }
+
+        // Ignore stale reports; stations file extra reports during storms, so
+        // active weather is almost always fresh.
+        let iso = ISO8601DateFormatter()
+        guard let stamp = iso.date(from: observation.properties.timestamp),
+              Date().timeIntervalSince(stamp) < 90 * 60
+        else { return nil }
+
+        return Self.activeCode(fromObservation: observation.properties.textDescription ?? "")
+    }
+
+    private func getNWS<T: Decodable>(_ url: URL) async -> T? {
+        var request = URLRequest(url: url)
+        // api.weather.gov requires an identifying User-Agent.
+        request.setValue("HazeWeatherApp (github.com/ankthba/haze)",
+                         forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 8
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Maps an NWS observation description to a WMO code, but only for active
+    /// weather worth overriding the model for.
+    static func activeCode(fromObservation text: String) -> Int? {
+        let t = text.lowercased()
+        if t.contains("thunder") { return 95 }
+        if t.contains("freezing") { return 66 }
+        if t.contains("sleet") || t.contains("ice pellets") { return 66 }
+        if t.contains("snow") {
+            if t.contains("heavy") { return 75 }
+            if t.contains("light") { return 71 }
+            return 73
+        }
+        if t.contains("drizzle") { return 53 }
+        if t.contains("rain") || t.contains("showers") {
+            if t.contains("heavy") { return 65 }
+            if t.contains("light") { return 61 }
+            return 63
+        }
+        if t.contains("fog") || t.contains("mist") { return 45 }
+        return nil
+    }
+
     // MARK: - Air quality
 
     private func fetchAirQuality(place: Place) async throws -> AirQuality? {
@@ -174,7 +277,8 @@ struct WeatherService {
     private func transform(raw: ForecastResponse,
                            place: Place,
                            timezone: TimeZone,
-                           airQuality: AirQuality?) throws -> WeatherBundle {
+                           airQuality: AirQuality?,
+                           observedCode: Int? = nil) throws -> WeatherBundle {
         let parser = LocalTimeParser(timezone: timezone)
 
         // Current
@@ -197,7 +301,7 @@ struct WeatherService {
             date: currentDate,
             temperature: c.temperature,
             apparentTemperature: c.apparentTemperature,
-            code: c.weatherCode,
+            code: observedCode ?? c.weatherCode,
             isDay: c.isDay == 1,
             humidity: c.humidity,
             precipitation: c.precipitation,

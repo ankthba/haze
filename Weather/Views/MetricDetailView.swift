@@ -95,6 +95,11 @@ struct MetricDetailView: View {
 
     var body: some View {
         ZStack {
+            SkyBackground(condition: bundle.current.condition,
+                          now: Date(),
+                          sunrise: bundle.today?.sunrise,
+                          sunset: bundle.today?.sunset)
+
             ScrollView {
                 VStack(spacing: 20) {
                     header
@@ -118,16 +123,7 @@ struct MetricDetailView: View {
         }
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
-        // The sheet itself is made of the signature material: the current sky
-        // glows through the frost, like a pane of glass laid over the weather.
-        .presentationBackground {
-            GlassSheetBackground {
-                SkyBackground(condition: bundle.current.condition,
-                              now: Date(),
-                              sunrise: bundle.today?.sunrise,
-                              sunset: bundle.today?.sunset)
-            }
-        }
+        .presentationBackground(.clear)
     }
 
     // MARK: - Top bar
