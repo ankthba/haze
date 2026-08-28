@@ -74,3 +74,45 @@ nonisolated enum GoldenHour {
         return sunrise...sunrise.addingTimeInterval(3600)
     }
 }
+
+// MARK: - Sun position
+
+nonisolated enum SunPosition {
+    /// The sun's compass bearing (degrees clockwise from true north) at a
+    /// moment and place — "where to look" for a rise or set. Low-precision
+    /// NOAA-style formulas, good to well under a degree; a compass label
+    /// can't resolve finer anyway.
+    static func azimuth(date: Date, latitude: Double, longitude: Double) -> Double {
+        let rad = Double.pi / 180
+
+        // Days from the J2000 epoch.
+        let d = date.timeIntervalSince1970 / 86_400 - 10957.5
+
+        // Solar coordinates.
+        let meanLongitude = normalize(280.460 + 0.985_647_4 * d)
+        let meanAnomaly = normalize(357.528 + 0.985_600_3 * d) * rad
+        let eclipticLongitude = (meanLongitude
+            + 1.915 * sin(meanAnomaly)
+            + 0.020 * sin(2 * meanAnomaly)) * rad
+        let obliquity = (23.439 - 0.000_000_4 * d) * rad
+        let declination = asin(sin(obliquity) * sin(eclipticLongitude))
+        let rightAscension = atan2(cos(obliquity) * sin(eclipticLongitude),
+                                   cos(eclipticLongitude))
+
+        // Local hour angle via sidereal time.
+        let siderealHours = 18.697_374_558 + 24.065_709_824_419_08 * d
+        let localSiderealDegrees = normalize(siderealHours * 15 + longitude)
+        let hourAngle = localSiderealDegrees * rad - rightAscension
+
+        // Azimuth measured from north, clockwise.
+        let phi = latitude * rad
+        let azimuthFromSouth = atan2(sin(hourAngle),
+                                     cos(hourAngle) * sin(phi) - tan(declination) * cos(phi))
+        return normalize(azimuthFromSouth / rad + 180)
+    }
+
+    private static func normalize(_ degrees: Double) -> Double {
+        let r = degrees.truncatingRemainder(dividingBy: 360)
+        return r < 0 ? r + 360 : r
+    }
+}

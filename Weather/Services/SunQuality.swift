@@ -51,8 +51,24 @@ nonisolated enum SunQuality {
         let cloudHigh: Double
         let cloudMid: Double
         let cloudLow: Double
+        let humidity: Double
+        /// Metres, when the model provides it.
+        let visibility: Double?
 
         var tier: Tier { Tier(score: score) }
+
+        /// Two or three words naming the sky's defining feature — the reason
+        /// behind the score, for list rows. Checked worst-news-first.
+        var signature: String {
+            let deck = min(cloudHigh + cloudMid * 0.5, 100)
+            if rainRisk >= 50 { return "rain likely" }
+            if cloudLow >= 60 { return "walled horizon" }
+            if deck > 78 { return "heavy sheet" }
+            if clarity < 55 { return "hazy air" }
+            if deck < 12 { return "bare sky" }
+            if canvas >= 80 { return "well-set clouds" }
+            return "mixed sky"
+        }
     }
 
     enum Tier: String {
@@ -180,7 +196,78 @@ nonisolated enum SunQuality {
                       horizon: Int(horizon.rounded()),
                       clarity: Int(clarity.rounded()),
                       rainRisk: Int(precipProb.rounded()),
-                      cloudHigh: high, cloudMid: mid, cloudLow: low)
+                      cloudHigh: high, cloudMid: mid, cloudLow: low,
+                      humidity: humidity, visibility: visibility)
+    }
+
+    // MARK: - Narrative
+
+    /// Two or three warm sentences about the event — the same editorial voice
+    /// as the home screen's daily brief. Verdict first, then timing advice,
+    /// then a garnish about the air; each sentence earns its place or is
+    /// dropped.
+    static func narrative(kind: SunEvent.Kind,
+                          rating: Rating,
+                          eventDate: Date,
+                          timezone: TimeZone) -> String {
+        let deck = min(rating.cloudHigh + rating.cloudMid * 0.5, 100)
+        let time = Fmt.time(eventDate, timezone: timezone)
+        let sunset = kind == .sunset
+
+        let verdict: String
+        switch rating.tier {
+        case .spectacular:
+            verdict = sunset
+                ? "The sky is set up for something special this evening — a broken deck of high cloud should catch fire as the sun slips under."
+                : "The sky is set up for something special — a broken deck of high cloud should catch first light and burn."
+        case .great:
+            verdict = sunset
+                ? "The clouds are arranged kindly tonight; expect real color climbing off the horizon."
+                : "The clouds are arranged kindly for the morning; expect real color before the sun clears the horizon."
+        case .good:
+            verdict = deck < 15
+                ? "A clean, quiet sky — expect a soft amber glow rather than fireworks."
+                : "Some color is likely — patches of high cloud should warm as the light comes in low."
+        case .fair:
+            verdict = rating.cloudLow >= 45
+                ? "Low cloud sits along the horizon, so most of the show will happen behind it."
+                : "A muted sky — the light has little up there to work with."
+        case .poor:
+            if rating.rainRisk >= 50 {
+                verdict = sunset
+                    ? "Rain is likely around sunset; the light will go quietly."
+                    : "Rain is likely around sunrise; the day will arrive quietly."
+            } else {
+                verdict = sunset
+                    ? "An overcast lid tonight — the sun will slip away unseen."
+                    : "An overcast lid this morning — the sun will arrive unseen."
+            }
+        }
+
+        var timing: String?
+        switch rating.tier {
+        case .great, .spectacular:
+            timing = sunset
+                ? "The best of it usually lands ten to twenty minutes after \(time) — stay a while."
+                : "Worth the early alarm — the color peaks in the minutes before \(time)."
+        case .good:
+            timing = sunset
+                ? "Golden hour runs the hour before \(time)."
+                : "First light starts warming the sky well before \(time)."
+        case .fair, .poor:
+            timing = nil
+        }
+
+        var garnish: String?
+        if rating.tier != .poor {
+            if rating.clarity >= 88 {
+                garnish = "The air is clean, so whatever color arrives will carry."
+            } else if rating.clarity < 60 {
+                garnish = "Haze will soften whatever color arrives."
+            }
+        }
+
+        return [verdict, timing, garnish].compactMap { $0 }.joined(separator: " ")
     }
 
     /// Piecewise-linear interpolation through (input, output) points, clamped

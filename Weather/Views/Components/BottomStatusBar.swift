@@ -132,9 +132,19 @@ struct BottomStatusBar: View {
                             Text(sun.time)
                                 .font(.serif(.subheadline, weight: .semibold))
                                 .foregroundStyle(.white)
-                            Text(sun.label)
-                                .font(.serif(.caption2))
-                                .foregroundStyle(.white.opacity(0.7))
+                            // The one-word verdict rides along, in its tier's
+                            // color — the page behind the tap, in miniature.
+                            if let tier = sun.tier {
+                                (Text("\(sun.label) · ")
+                                    .foregroundStyle(.white.opacity(0.7))
+                                 + Text(tier.rawValue)
+                                    .foregroundStyle(tier.accent))
+                                    .font(.serif(.caption2))
+                            } else {
+                                Text(sun.label)
+                                    .font(.serif(.caption2))
+                                    .foregroundStyle(.white.opacity(0.7))
+                            }
                         }
                     }
                     // A little slack around the readout keeps the tap target
@@ -143,7 +153,9 @@ struct BottomStatusBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(sun.label) at \(sun.time)")
+                .accessibilityLabel(sun.tier.map {
+                    "\(sun.label) at \(sun.time), rated \($0.rawValue)"
+                } ?? "\(sun.label) at \(sun.time)")
                 .accessibilityHint("Shows sunrise and sunset quality ratings")
             }
         }
@@ -162,20 +174,23 @@ struct BottomStatusBar: View {
     }
 
     /// Sunset while the sun is still up, sunrise once it's down — whichever is
-    /// genuinely next, including tomorrow's sunrise late at night.
-    private var nextSunEvent: (symbol: String, label: String, time: String)? {
+    /// genuinely next, including tomorrow's sunrise late at night. Carries the
+    /// event's quality tier when the forecast can support one.
+    private var nextSunEvent: (symbol: String, label: String, time: String,
+                               tier: SunQuality.Tier?)? {
         let now = Date()
         let tz = bundle.timezone
-        let upcoming: [(Date, String, String)] = bundle.daily.prefix(2).flatMap { day -> [(Date, String, String)] in
-            var events: [(Date, String, String)] = []
-            if let sunrise = day.sunrise { events.append((sunrise, "sunrise.fill", "Sunrise")) }
-            if let sunset = day.sunset { events.append((sunset, "sunset.fill", "Sunset")) }
+        let upcoming: [(Date, SunEvent.Kind)] = bundle.daily.prefix(2).flatMap { day -> [(Date, SunEvent.Kind)] in
+            var events: [(Date, SunEvent.Kind)] = []
+            if let sunrise = day.sunrise { events.append((sunrise, .sunrise)) }
+            if let sunset = day.sunset { events.append((sunset, .sunset)) }
             return events
         }
         guard let next = upcoming
             .filter({ $0.0 > now })
             .min(by: { $0.0 < $1.0 })
         else { return nil }
-        return (next.1, next.2, Fmt.time(next.0, timezone: tz))
+        let tier = SunQuality.rate(kind: next.1, at: next.0, in: bundle)?.tier
+        return (next.1.symbolName, next.1.rawValue, Fmt.time(next.0, timezone: tz), tier)
     }
 }
