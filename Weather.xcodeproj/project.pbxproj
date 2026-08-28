@@ -819,6 +819,7 @@
 				DEVELOPMENT_TEAM = H7T2D2GL7U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HazeWatchComplicationsInfo.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Haze;
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather.watchkitapp.complications;
@@ -847,6 +848,7 @@
 				DEVELOPMENT_TEAM = H7T2D2GL7U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HazeWatchComplicationsInfo.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Haze;
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather.watchkitapp.complications;
