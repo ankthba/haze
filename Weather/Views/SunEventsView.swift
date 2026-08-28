@@ -28,6 +28,8 @@ extension SunQuality.Tier {
 struct SunEventsView: View {
     let bundle: WeatherBundle
     let unit: TemperatureUnit
+    /// The side the opening tap asked for; nil features the next event.
+    var initialKind: SunEvent.Kind? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: String?
@@ -93,10 +95,12 @@ struct SunEventsView: View {
         .presentationDragIndicator(.visible)
         .presentationBackground(.clear)
         .animation(.easeInOut(duration: 0.45), value: selectedID)
-        // Screenshot/automation hook: open with the sunrise side selected.
         .onAppear {
+            // The tapped side of the bar, or the screenshot rig's override.
             if ProcessInfo.processInfo.arguments.contains("-showSunrise") {
                 selectedID = events.first { $0.kind == .sunrise }?.id
+            } else if let initialKind {
+                selectedID = events.first { $0.kind == initialKind }?.id
             }
         }
     }

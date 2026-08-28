@@ -15,6 +15,8 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showRadar = false
     @State private var showSunEvents = false
+    /// Which side of the sun page the tap asked for.
+    @State private var sunEventsKind: SunEvent.Kind = .sunset
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -56,7 +58,10 @@ struct ContentView: View {
                                 onReturnHome: {
                                     Task { await viewModel.useCurrentLocation() }
                                 },
-                                onSunTap: { showSunEvents = true })
+                                onSunTap: { kind in
+                                    sunEventsKind = kind
+                                    showSunEvents = true
+                                })
                             // Same inset on the sides as the corner radius is
                             // measured from; the bottom value is measured from
                             // the *physical* edge, since bottom-aligned inside
@@ -151,7 +156,8 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSunEvents) {
             if let bundle = viewModel.bundle {
-                SunEventsView(bundle: bundle, unit: viewModel.temperatureUnit)
+                SunEventsView(bundle: bundle, unit: viewModel.temperatureUnit,
+                              initialKind: sunEventsKind)
             }
         }
         .fullScreenCover(isPresented: $showRadar) {
