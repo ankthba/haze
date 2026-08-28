@@ -5,6 +5,7 @@
 //  Orchestrates location, saved places, units, and forecast fetching.
 //
 
+import CoreLocation
 import Foundation
 import Observation
 import SwiftUI
