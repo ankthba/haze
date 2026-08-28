@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showSearch = false
     @State private var showSettings = false
     @State private var showRadar = false
+    @State private var showSunEvents = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -54,7 +55,8 @@ struct ContentView: View {
                                     ? nil : viewModel.deviceSummary,
                                 onReturnHome: {
                                     Task { await viewModel.useCurrentLocation() }
-                                })
+                                },
+                                onSunTap: { showSunEvents = true })
                             // Same inset on the sides as the corner radius is
                             // measured from; the bottom value is measured from
                             // the *physical* edge, since bottom-aligned inside
@@ -94,6 +96,13 @@ struct ContentView: View {
                 onFinish: { viewModel.hasOnboarded = true })
         }
         .animation(.easeInOut(duration: 0.5), value: viewModel.bundle?.place.id)
+        // Screenshot/automation hook: launch with -openSunEvents to land on
+        // the sunrise/sunset quality sheet once the forecast is up.
+        .onChange(of: viewModel.bundle == nil) { _, isNil in
+            if !isNil, ProcessInfo.processInfo.arguments.contains("-openSunEvents") {
+                showSunEvents = true
+            }
+        }
         .task {
             metrics.refresh()
             // Adopt anything iCloud already has before the first fetch, then
@@ -139,6 +148,11 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showSunEvents) {
+            if let bundle = viewModel.bundle {
+                SunEventsView(bundle: bundle, unit: viewModel.temperatureUnit)
+            }
         }
         .fullScreenCover(isPresented: $showRadar) {
             if let bundle = viewModel.bundle {

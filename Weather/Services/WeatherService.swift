@@ -92,7 +92,11 @@ nonisolated struct WeatherService {
                 "temperature_2m", "relative_humidity_2m", "apparent_temperature",
                 "precipitation_probability", "precipitation", "weather_code",
                 "wind_speed_10m", "wind_direction_10m", "uv_index", "is_day",
-                "dew_point_2m", "visibility"
+                "dew_point_2m", "visibility",
+                // Layered cloud cover feeds the sunrise/sunset quality model:
+                // high/mid clouds are the canvas the light paints, low clouds
+                // are the wall that blocks it.
+                "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"
             ].joined(separator: ",")),
             .init(name: "daily", value: [
                 "weather_code", "temperature_2m_max", "temperature_2m_min",
@@ -432,7 +436,7 @@ nonisolated struct WeatherService {
         hours.reserveCapacity(hourlyDates.count)
         for i in h.time.indices {
             guard let date = hourlyDates[safe: i] ?? nil, date >= todayStart else { continue }
-            hours.append(HourPoint(
+            var point = HourPoint(
                 date: date,
                 temperature: h.temperature[safe: i] ?? 0,
                 apparentTemperature: h.apparentTemperature[safe: i] ?? 0,
@@ -444,7 +448,12 @@ nonisolated struct WeatherService {
                 windDirection: h.windDirection[safe: i] ?? 0,
                 humidity: h.humidity[safe: i] ?? 0,
                 uvIndex: h.uvIndex[safe: i] ?? 0
-            ))
+            )
+            point.cloudCoverLow = h.cloudCoverLow?[safe: i]
+            point.cloudCoverMid = h.cloudCoverMid?[safe: i]
+            point.cloudCoverHigh = h.cloudCoverHigh?[safe: i]
+            point.visibility = h.visibility?[safe: i]
+            hours.append(point)
         }
 
         // Daily — the entry before today becomes the comparison record.

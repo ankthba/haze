@@ -22,6 +22,8 @@ struct BottomStatusBar: View {
     /// also the only time returning home means anything.
     let homeSummary: WeatherViewModel.DeviceSummary?
     var onReturnHome: () -> Void
+    /// Opens the sunrise/sunset quality page; the sun readout is the door.
+    var onSunTap: (() -> Void)? = nil
 
     /// Inset from the screen's side edges; the corner radius is measured from it.
     static let inset: CGFloat = 16
@@ -118,21 +120,31 @@ struct BottomStatusBar: View {
             Spacer(minLength: 8)
 
             if let sun = nextSunEvent {
-                HStack(spacing: 7) {
-                    Image(systemName: sun.symbol)
-                        .symbolRenderingMode(.multicolor)
-                        .font(.system(size: 18))
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text(sun.time)
-                            .font(.serif(.subheadline, weight: .semibold))
-                            .foregroundStyle(.white)
-                        Text(sun.label)
-                            .font(.serif(.caption2))
-                            .foregroundStyle(.white.opacity(0.7))
+                Button {
+                    Haptics.tap()
+                    onSunTap?()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: sun.symbol)
+                            .symbolRenderingMode(.multicolor)
+                            .font(.system(size: 18))
+                        VStack(alignment: .trailing, spacing: 0) {
+                            Text(sun.time)
+                                .font(.serif(.subheadline, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text(sun.label)
+                                .font(.serif(.caption2))
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
                     }
+                    // A little slack around the readout keeps the tap target
+                    // honest without changing the bar's layout.
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(sun.label) at \(sun.time)")
+                .accessibilityHint("Shows sunrise and sunset quality ratings")
             }
         }
         .padding(.leading, 12)

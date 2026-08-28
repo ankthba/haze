@@ -71,10 +71,13 @@ struct ForecastResponse: Decodable {
         let windDirection: [Double]
         let uvIndex: [Double]
         let isDay: [Int]
-        /// Optional: these two joined the request later, and absence must not
+        /// Optional: these joined the request later, and absence must not
         /// fail the whole decode.
         let dewPoint: [Double]?
         let visibility: [Double]?
+        let cloudCoverLow: [Double]?
+        let cloudCoverMid: [Double]?
+        let cloudCoverHigh: [Double]?
 
         enum CodingKeys: String, CodingKey {
             case time
@@ -90,6 +93,9 @@ struct ForecastResponse: Decodable {
             case isDay = "is_day"
             case dewPoint = "dew_point_2m"
             case visibility
+            case cloudCoverLow = "cloud_cover_low"
+            case cloudCoverMid = "cloud_cover_mid"
+            case cloudCoverHigh = "cloud_cover_high"
         }
     }
 

@@ -174,6 +174,13 @@ nonisolated struct HourPoint: Identifiable, Codable {
     let windDirection: Double
     let humidity: Double
     let uvIndex: Double
+    // Optional (and `var`) so cache entries from before these fields decode.
+    /// Layered cloud cover (%) for the sunrise/sunset quality model.
+    var cloudCoverLow: Double?
+    var cloudCoverMid: Double?
+    var cloudCoverHigh: Double?
+    /// Metres; same source as the current-conditions visibility.
+    var visibility: Double?
 
     var condition: WeatherCondition { WeatherCondition(code: code, isDay: isDay) }
 }
