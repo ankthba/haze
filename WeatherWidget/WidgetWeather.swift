@@ -57,6 +57,9 @@ enum WidgetWeatherFetcher {
     /// Fetch a fresh snapshot for the saved location, or nil on any failure
     /// (caller falls back to the last cached snapshot).
     static func fetch(_ loc: WidgetLocation) async -> WeatherWidgetSnapshot? {
+        // NBM temperatures ride alongside for US locations, matching the app's
+        // overlay (best_match is raw GFS there and runs hot on daily highs).
+        async let overlay = fetchNBM(loc)
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
             .init(name: "latitude", value: String(loc.latitude)),
@@ -74,9 +77,62 @@ enum WidgetWeatherFetcher {
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 return nil
             }
-            return build(try JSONDecoder().decode(Response.self, from: data), loc: loc)
+            var decoded = try JSONDecoder().decode(Response.self, from: data)
+            if let nbm = await overlay { apply(nbm, to: &decoded) }
+            return build(decoded, loc: loc)
         } catch {
             return nil
+        }
+    }
+
+    /// The NBM slice the widget shows: hourly temperatures plus daily
+    /// highs/lows. Nil outside likely US coverage or on any failure — the
+    /// best-match numbers stand in that case.
+    private static func fetchNBM(_ loc: WidgetLocation) async -> NBMResponse? {
+        guard (23.0...51.0).contains(loc.latitude),
+              ((-127.0)...(-65.0)).contains(loc.longitude) else { return nil }
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        components?.queryItems = [
+            .init(name: "latitude", value: String(loc.latitude)),
+            .init(name: "longitude", value: String(loc.longitude)),
+            .init(name: "models", value: "ncep_nbm_conus"),
+            .init(name: "hourly", value: "temperature_2m"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
+            .init(name: "temperature_unit", value: loc.temperatureUnit),
+            .init(name: "timezone", value: "auto"),
+            .init(name: "forecast_days", value: "7")
+        ]
+        guard let url = components?.url,
+              let (data, response) = try? await URLSession.shared.data(from: url),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
+        return try? JSONDecoder().decode(NBMResponse.self, from: data)
+    }
+
+    /// Splices NBM values over the best-match arrays by matching wall-clock
+    /// stamps; null elements and unmatched stamps keep the best-match value.
+    private static func apply(_ nbm: NBMResponse, to r: inout Response) {
+        var hourIndex: [String: Int] = [:]
+        for (i, t) in r.hourly.time.enumerated() where hourIndex[t] == nil { hourIndex[t] = i }
+        if let temps = nbm.hourly.temperature_2m {
+            for (j, t) in nbm.hourly.time.enumerated() {
+                guard j < temps.count, let v = temps[j], let i = hourIndex[t],
+                      r.hourly.temperature_2m.indices.contains(i) else { continue }
+                r.hourly.temperature_2m[i] = v
+            }
+        }
+        var dayIndex: [String: Int] = [:]
+        for (i, t) in r.daily.time.enumerated() where dayIndex[t] == nil { dayIndex[t] = i }
+        for (j, t) in nbm.daily.time.enumerated() {
+            guard let i = dayIndex[t] else { continue }
+            if let maxs = nbm.daily.temperature_2m_max, j < maxs.count, let v = maxs[j],
+               r.daily.temperature_2m_max.indices.contains(i) {
+                r.daily.temperature_2m_max[i] = v
+            }
+            if let mins = nbm.daily.temperature_2m_min, j < mins.count, let v = mins[j],
+               r.daily.temperature_2m_min.indices.contains(i) {
+                r.daily.temperature_2m_min[i] = v
+            }
         }
     }
 
@@ -85,28 +141,46 @@ enum WidgetWeatherFetcher {
     private struct Response: Decodable {
         let timezone: String
         let current: Current
-        let hourly: Hourly
-        let daily: Daily
+        // `var`: the NBM overlay splices into these.
+        var hourly: Hourly
+        var daily: Daily
 
         struct Current: Decodable {
             let temperature_2m: Double
             let weather_code: Int
             let is_day: Int
         }
+        // `var` fields are the ones the NBM overlay may splice into.
         struct Hourly: Decodable {
             let time: [String]
-            let temperature_2m: [Double]
+            var temperature_2m: [Double]
             let weather_code: [Int]
             let is_day: [Int]
         }
         struct Daily: Decodable {
             let time: [String]
-            let temperature_2m_max: [Double]
-            let temperature_2m_min: [Double]
+            var temperature_2m_max: [Double]
+            var temperature_2m_min: [Double]
             let weather_code: [Int]
             let sunrise: [String]
             let sunset: [String]
         }
+    }
+
+    /// NBM answers, element-optional because Open-Meteo returns null where the
+    /// blend has no value and a null must fall back to best-match, not zero.
+    private struct NBMResponse: Decodable {
+        struct Hourly: Decodable {
+            let time: [String]
+            let temperature_2m: [Double?]?
+        }
+        struct Daily: Decodable {
+            let time: [String]
+            let temperature_2m_max: [Double?]?
+            let temperature_2m_min: [Double?]?
+        }
+        let hourly: Hourly
+        let daily: Daily
     }
 
     private static func build(_ r: Response, loc: WidgetLocation) -> WeatherWidgetSnapshot {

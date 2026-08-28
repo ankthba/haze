@@ -90,11 +90,54 @@ nonisolated enum WatchSnapshotStore {
         UserDefaults(suiteName: appGroup)?.set(data, forKey: snapshotKey)
     }
 
+    /// NBM answers, element-optional because Open-Meteo returns null where the
+    /// blend has no value and a null must fall back to best-match, not zero.
+    private struct NBMWire: Decodable {
+        struct Hourly: Decodable {
+            let time: [String]
+            let temperature_2m: [Double?]?
+        }
+        struct Daily: Decodable {
+            let time: [String]
+            let temperature_2m_max: [Double?]?
+            let temperature_2m_min: [Double?]?
+        }
+        let hourly: Hourly
+        let daily: Daily
+    }
+
+    /// NBM temperature overlay for US locations — the calibrated blend the NWS
+    /// forecast tracks; Open-Meteo's default best_match is raw GFS in the US
+    /// and runs hot on daily highs. Nil outside likely coverage or on failure.
+    private static func fetchNBM(_ loc: WatchLocation) async -> NBMWire? {
+        guard (23.0...51.0).contains(loc.latitude),
+              ((-127.0)...(-65.0)).contains(loc.longitude) else { return nil }
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        components?.queryItems = [
+            .init(name: "latitude", value: String(loc.latitude)),
+            .init(name: "longitude", value: String(loc.longitude)),
+            .init(name: "models", value: "ncep_nbm_conus"),
+            .init(name: "hourly", value: "temperature_2m"),
+            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
+            .init(name: "temperature_unit", value: loc.temperatureUnit),
+            .init(name: "timezone", value: "auto"),
+            .init(name: "forecast_days", value: "2"),
+        ]
+        guard let url = components?.url,
+              let (data, response) = try? await URLSession.shared.data(from: url),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
+        return try? JSONDecoder().decode(NBMWire.self, from: data)
+    }
+
     /// One small Open-Meteo request for the phone's location — the same
     /// single-location shape the widget uses, so watch usage can't multiply
     /// into rate-limit territory.
     static func fetchOwn() async -> WatchSnapshot? {
         guard let loc = readLocation() else { return nil }
+        // NBM temperatures ride alongside for US locations, matching the phone
+        // app's overlay (best_match is raw GFS there and runs hot on highs).
+        async let overlay = fetchNBM(loc)
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
             .init(name: "latitude", value: String(loc.latitude)),
@@ -117,23 +160,53 @@ nonisolated enum WatchSnapshotStore {
                 let weather_code: Int
                 let is_day: Int
             }
+            // `var` fields are the ones the NBM overlay may splice into.
             struct Hourly: Decodable {
                 let time: [String]
-                let temperature_2m: [Double]
+                var temperature_2m: [Double]
                 let weather_code: [Int]
                 let is_day: [Int]
             }
             struct Daily: Decodable {
-                let temperature_2m_max: [Double]
-                let temperature_2m_min: [Double]
+                let time: [String]
+                var temperature_2m_max: [Double]
+                var temperature_2m_min: [Double]
                 let weather_code: [Int]
             }
             let timezone: String
             let current: Current
-            let hourly: Hourly
-            let daily: Daily
+            // `var`: the NBM overlay splices into these.
+            var hourly: Hourly
+            var daily: Daily
         }
-        guard let wire = try? JSONDecoder().decode(Wire.self, from: data) else { return nil }
+        guard var wire = try? JSONDecoder().decode(Wire.self, from: data) else { return nil }
+
+        // Splice NBM values in by matching wall-clock stamps; null elements
+        // and unmatched stamps keep the best-match value.
+        if let nbm = await overlay {
+            var hourIndex: [String: Int] = [:]
+            for (i, t) in wire.hourly.time.enumerated() where hourIndex[t] == nil { hourIndex[t] = i }
+            if let temps = nbm.hourly.temperature_2m {
+                for (j, t) in nbm.hourly.time.enumerated() {
+                    guard j < temps.count, let v = temps[j], let i = hourIndex[t],
+                          wire.hourly.temperature_2m.indices.contains(i) else { continue }
+                    wire.hourly.temperature_2m[i] = v
+                }
+            }
+            var dayIndex: [String: Int] = [:]
+            for (i, t) in wire.daily.time.enumerated() where dayIndex[t] == nil { dayIndex[t] = i }
+            for (j, t) in nbm.daily.time.enumerated() {
+                guard let i = dayIndex[t] else { continue }
+                if let maxs = nbm.daily.temperature_2m_max, j < maxs.count, let v = maxs[j],
+                   wire.daily.temperature_2m_max.indices.contains(i) {
+                    wire.daily.temperature_2m_max[i] = v
+                }
+                if let mins = nbm.daily.temperature_2m_min, j < mins.count, let v = mins[j],
+                   wire.daily.temperature_2m_min.indices.contains(i) {
+                    wire.daily.temperature_2m_min[i] = v
+                }
+            }
+        }
 
         let tz = TimeZone(identifier: wire.timezone) ?? .current
         let parser = DateFormatter()

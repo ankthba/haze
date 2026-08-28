@@ -212,7 +212,9 @@ struct DailyBriefTests {
                                yesterday: YesterdayComparison(high: 40, low: 20, sameHourTemperature: 40),
                                windSpeed: 10, windGust: 40),
             nowcast: nil, now: now)
-        let sentences = text.split(separator: ".").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        // Sentence boundaries are ". " (or the final "."), so a decimal like
+        // "4.0 in" doesn't count as two sentences.
+        let sentences = text.components(separatedBy: ". ").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         #expect(sentences.count <= 3)
     }
 

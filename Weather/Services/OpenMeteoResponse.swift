@@ -11,8 +11,9 @@ struct ForecastResponse: Decodable {
     let timezone: String
     let utcOffsetSeconds: Int
     let current: Current
-    let hourly: Hourly
-    let daily: Daily
+    // `var`: the NBM overlay splices into these — see NBMOverlay.swift.
+    var hourly: Hourly
+    var daily: Daily
     /// 15-minute precipitation for the next ~3 h; optional because the model
     /// only covers some regions and the key is absent elsewhere.
     let minutely15: Minutely15?
@@ -59,22 +60,24 @@ struct ForecastResponse: Decodable {
         }
     }
 
+    /// `var` fields are the ones the NBM overlay may splice calibrated values
+    /// into for US locations — see NBMOverlay.swift.
     struct Hourly: Decodable {
         let time: [String]
-        let temperature: [Double]
-        let humidity: [Double]
-        let apparentTemperature: [Double]
-        let precipitationProbability: [Int]
+        var temperature: [Double]
+        var humidity: [Double]
+        var apparentTemperature: [Double]
+        var precipitationProbability: [Int]
         let precipitation: [Double]
         let weatherCode: [Int]
-        let windSpeed: [Double]
-        let windDirection: [Double]
+        var windSpeed: [Double]
+        var windDirection: [Double]
         let uvIndex: [Double]
         let isDay: [Int]
         /// Optional: these joined the request later, and absence must not
         /// fail the whole decode.
-        let dewPoint: [Double]?
-        let visibility: [Double]?
+        var dewPoint: [Double]?
+        var visibility: [Double]?
         let cloudCoverLow: [Double]?
         let cloudCoverMid: [Double]?
         let cloudCoverHigh: [Double]?
@@ -99,21 +102,23 @@ struct ForecastResponse: Decodable {
         }
     }
 
+    /// `var` fields are the ones the NBM overlay may splice calibrated values
+    /// into for US locations — see NBMOverlay.swift.
     struct Daily: Decodable {
         let time: [String]
         let weatherCode: [Int]
-        let tempMax: [Double]
-        let tempMin: [Double]
-        let apparentMax: [Double]
-        let apparentMin: [Double]
+        var tempMax: [Double]
+        var tempMin: [Double]
+        var apparentMax: [Double]
+        var apparentMin: [Double]
         let sunrise: [String]
         let sunset: [String]
         let uvIndexMax: [Double]
         let precipitationSum: [Double]
-        let precipitationProbabilityMax: [Int]
-        let windSpeedMax: [Double]
-        let windGustMax: [Double]
-        let windDirectionDominant: [Double]
+        var precipitationProbabilityMax: [Int]
+        var windSpeedMax: [Double]
+        var windGustMax: [Double]
+        var windDirectionDominant: [Double]
         /// Optional for the same forward-compatibility reason as the hourly pair.
         let snowfallSum: [Double]?
 

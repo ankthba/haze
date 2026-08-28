@@ -42,10 +42,20 @@ nonisolated struct WeatherService {
                        temperatureUnit: TemperatureUnit,
                        speedUnit: SpeedUnit,
                        precipUnit: PrecipUnit = .auto) async throws -> WeatherBundle {
-        let (raw, tz) = try await fetchForecastResponse(place: place,
-                                                        temperatureUnit: temperatureUnit,
-                                                        speedUnit: speedUnit,
-                                                        precipUnit: precipUnit)
+        // The NBM overlay rides alongside the main request and splices in the
+        // numbers the calibrated blend does better (see NBMOverlay.swift);
+        // outside its US coverage, or on any failure, nothing changes.
+        async let overlay = NBMOverlay.fetch(place: place,
+                                             temperatureUnit: temperatureUnit,
+                                             speedUnit: speedUnit,
+                                             precipUnit: precipUnit,
+                                             session: session)
+        let (fetched, tz) = try await fetchForecastResponse(place: place,
+                                                            temperatureUnit: temperatureUnit,
+                                                            speedUnit: speedUnit,
+                                                            precipUnit: precipUnit)
+        var raw = fetched
+        if let nbm = await overlay { raw.applyNBM(nbm) }
         return try transform(raw: raw, place: place, timezone: tz,
                              airQuality: nil, observedCode: nil)
     }
