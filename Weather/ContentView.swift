@@ -96,12 +96,12 @@ struct ContentView: View {
                 onFinish: { viewModel.hasOnboarded = true })
         }
         .animation(.easeInOut(duration: 0.5), value: viewModel.bundle?.place.id)
-        // Screenshot/automation hook: launch with -openSunEvents to land on
-        // the sunrise/sunset quality sheet once the forecast is up.
+        // Screenshot/automation hooks: land on a sheet once the forecast is up.
         .onChange(of: viewModel.bundle == nil) { _, isNil in
-            if !isNil, ProcessInfo.processInfo.arguments.contains("-openSunEvents") {
-                showSunEvents = true
-            }
+            guard !isNil else { return }
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-openSunEvents") { showSunEvents = true }
+            if arguments.contains("-openSettings") { showSettings = true }
         }
         .task {
             metrics.refresh()

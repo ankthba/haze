@@ -41,11 +41,68 @@ enum NotificationPlanner {
         set { UserDefaults.standard.set(newValue, forKey: goldenEnabledKey) }
     }
 
-    /// Reconcile both scheduled notifications with the newest forecast. Called
+    // MARK: - Sunrise/sunset alert settings
+
+    private static let sunsetAlertEnabledKey = "sunset_alert_enabled"
+    private static let sunriseAlertEnabledKey = "sunrise_alert_enabled"
+    private static let sunsetLeadKey = "sunset_alert_lead_minutes"
+    private static let sunriseLeadKey = "sunrise_alert_lead_minutes"
+    private static let sunsetGateKey = "sunset_alert_gate"
+    private static let sunriseGateKey = "sunrise_alert_gate"
+
+    private static let sunsetID = "sunset-alert"
+    private static let sunriseID = "sunrise-alert"
+
+    /// Both alerts default on with quality gates chosen so they only speak
+    /// when the sky is worth it — the setting most people would pick.
+    static var sunsetAlertEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: sunsetAlertEnabledKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: sunsetAlertEnabledKey) }
+    }
+
+    static var sunriseAlertEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: sunriseAlertEnabledKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: sunriseAlertEnabledKey) }
+    }
+
+    /// Minutes of warning; half an hour reaches a west-facing spot.
+    static var sunsetAlertLeadMinutes: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: sunsetLeadKey)
+            return stored > 0 ? stored : 30
+        }
+        set { UserDefaults.standard.set(newValue, forKey: sunsetLeadKey) }
+    }
+
+    /// Sunrises need waking-up time on top of getting-out time.
+    static var sunriseAlertLeadMinutes: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: sunriseLeadKey)
+            return stored > 0 ? stored : 45
+        }
+        set { UserDefaults.standard.set(newValue, forKey: sunriseLeadKey) }
+    }
+
+    /// Sunsets speak for anything Good; a sunrise has to earn the alarm.
+    static var sunsetAlertGate: SunQuality.AlertGate {
+        get { SunQuality.AlertGate(rawValue:
+                UserDefaults.standard.string(forKey: sunsetGateKey) ?? "") ?? .good }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: sunsetGateKey) }
+    }
+
+    static var sunriseAlertGate: SunQuality.AlertGate {
+        get { SunQuality.AlertGate(rawValue:
+                UserDefaults.standard.string(forKey: sunriseGateKey) ?? "") ?? .great }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: sunriseGateKey) }
+    }
+
+    /// Reconcile every scheduled notification with the newest forecast. Called
     /// after every successful device-place load and from the background check.
     static func refresh(bundle: WeatherBundle, usesFahrenheit: Bool) {
         refreshDigest(bundle: bundle, usesFahrenheit: usesFahrenheit)
         refreshGoldenHour(bundle: bundle)
+        refreshSunAlert(kind: .sunset, bundle: bundle)
+        refreshSunAlert(kind: .sunrise, bundle: bundle)
     }
 
     static func cancelDigest() {
@@ -56,6 +113,12 @@ enum NotificationPlanner {
     static func cancelGoldenHour() {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [goldenID])
+    }
+
+    static func cancelSunAlert(kind: SunEvent.Kind) {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(
+                withIdentifiers: [kind == .sunset ? sunsetID : sunriseID])
     }
 
     // MARK: - Morning digest
@@ -99,6 +162,53 @@ enum NotificationPlanner {
         // always built from the freshest forecast we've seen.
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: digestID, content: content, trigger: trigger))
+    }
+
+    // MARK: - Sunrise/sunset alerts
+
+    /// Queue the next qualifying event of this kind: the soonest one, within
+    /// the next few days, whose rating clears the user's gate. One pending
+    /// request per kind, replaced wholesale on every refresh so a forecast
+    /// that turns (a cloud deck arriving, a rating collapsing) reschedules or
+    /// silences the alert on the next check.
+    private static func refreshSunAlert(kind: SunEvent.Kind, bundle: WeatherBundle) {
+        let enabled = kind == .sunset ? sunsetAlertEnabled : sunriseAlertEnabled
+        let lead = kind == .sunset ? sunsetAlertLeadMinutes : sunriseAlertLeadMinutes
+        let gate = kind == .sunset ? sunsetAlertGate : sunriseAlertGate
+        let id = kind == .sunset ? sunsetID : sunriseID
+        guard enabled else { return }
+
+        let now = Date()
+        // Ratings lose meaning past a couple of days; look that far, no more.
+        let candidates = bundle.daily.prefix(3)
+            .compactMap { kind == .sunset ? $0.sunset : $0.sunrise }
+            .filter { $0.addingTimeInterval(TimeInterval(-lead * 60)) > now }
+            .sorted()
+
+        for event in candidates {
+            guard let rating = SunQuality.rate(kind: kind, at: event, in: bundle) else {
+                continue
+            }
+            guard rating.score >= gate.minScore else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = "\(kind.rawValue) at \(Fmt.time(event, timezone: bundle.timezone))"
+            content.body = "Rates \(rating.score), \(rating.tier.rawValue.lowercased()). \(rating.tier.blurb)"
+            content.sound = .default
+
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = bundle.timezone
+            let fire = event.addingTimeInterval(TimeInterval(-lead * 60))
+            let components = cal.dateComponents([.year, .month, .day, .hour, .minute],
+                                                from: fire)
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: id, content: content,
+                                      trigger: UNCalendarNotificationTrigger(
+                                          dateMatching: components, repeats: false)))
+            return
+        }
+        // Nothing qualifies in the window; make sure no stale alert lingers.
+        cancelSunAlert(kind: kind)
     }
 
     // MARK: - Golden hour

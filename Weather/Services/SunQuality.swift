@@ -100,6 +100,30 @@ nonisolated enum SunQuality {
         }
     }
 
+    /// The bar an event must clear before its alert fires. Stored by raw
+    /// value; scores line up with the Tier boundaries.
+    enum AlertGate: String, CaseIterable, Identifiable {
+        case any, good, great
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .any:   return "Every day"
+            case .good:  return "Good or better"
+            case .great: return "Great or better"
+            }
+        }
+
+        var minScore: Int {
+            switch self {
+            case .any:   return 0
+            case .good:  return 45
+            case .great: return 65
+            }
+        }
+    }
+
     // MARK: Event list
 
     /// Every sunrise and sunset in the bundle's daily window, rated where the

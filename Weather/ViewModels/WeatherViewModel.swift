@@ -298,6 +298,72 @@ final class WeatherViewModel {
         }
     }
 
+    /// Sunset and sunrise quality alerts: a heads-up before the next event
+    /// that clears the user's chosen bar.
+    var sunsetAlertEnabled: Bool {
+        didSet {
+            guard oldValue != sunsetAlertEnabled else { return }
+            NotificationPlanner.sunsetAlertEnabled = sunsetAlertEnabled
+            if sunsetAlertEnabled {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if await RainAlertsService.requestPermission() { replanNotifications() }
+                    else { sunsetAlertEnabled = false }
+                }
+            } else {
+                NotificationPlanner.cancelSunAlert(kind: .sunset)
+            }
+        }
+    }
+
+    var sunriseAlertEnabled: Bool {
+        didSet {
+            guard oldValue != sunriseAlertEnabled else { return }
+            NotificationPlanner.sunriseAlertEnabled = sunriseAlertEnabled
+            if sunriseAlertEnabled {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if await RainAlertsService.requestPermission() { replanNotifications() }
+                    else { sunriseAlertEnabled = false }
+                }
+            } else {
+                NotificationPlanner.cancelSunAlert(kind: .sunrise)
+            }
+        }
+    }
+
+    var sunsetAlertLeadMinutes: Int {
+        didSet {
+            guard oldValue != sunsetAlertLeadMinutes else { return }
+            NotificationPlanner.sunsetAlertLeadMinutes = sunsetAlertLeadMinutes
+            replanNotifications()
+        }
+    }
+
+    var sunriseAlertLeadMinutes: Int {
+        didSet {
+            guard oldValue != sunriseAlertLeadMinutes else { return }
+            NotificationPlanner.sunriseAlertLeadMinutes = sunriseAlertLeadMinutes
+            replanNotifications()
+        }
+    }
+
+    var sunsetAlertGate: SunQuality.AlertGate {
+        didSet {
+            guard oldValue != sunsetAlertGate else { return }
+            NotificationPlanner.sunsetAlertGate = sunsetAlertGate
+            replanNotifications()
+        }
+    }
+
+    var sunriseAlertGate: SunQuality.AlertGate {
+        didSet {
+            guard oldValue != sunriseAlertGate else { return }
+            NotificationPlanner.sunriseAlertGate = sunriseAlertGate
+            replanNotifications()
+        }
+    }
+
     /// Rebuild the scheduled notifications from the on-screen device bundle.
     private func replanNotifications() {
         guard let bundle, isShowingDeviceLocation || locationManager.isDenied else { return }
@@ -357,6 +423,12 @@ final class WeatherViewModel {
         notificationsEnabled = RainAlertsService.isEnabled
         morningDigestEnabled = NotificationPlanner.digestEnabled
         goldenHourEnabled = NotificationPlanner.goldenHourEnabled
+        sunsetAlertEnabled = NotificationPlanner.sunsetAlertEnabled
+        sunriseAlertEnabled = NotificationPlanner.sunriseAlertEnabled
+        sunsetAlertLeadMinutes = NotificationPlanner.sunsetAlertLeadMinutes
+        sunriseAlertLeadMinutes = NotificationPlanner.sunriseAlertLeadMinutes
+        sunsetAlertGate = NotificationPlanner.sunsetAlertGate
+        sunriseAlertGate = NotificationPlanner.sunriseAlertGate
         digestTime = Calendar.current.date(
             bySettingHour: NotificationPlanner.digestMinutes / 60,
             minute: NotificationPlanner.digestMinutes % 60,

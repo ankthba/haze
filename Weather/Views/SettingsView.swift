@@ -27,36 +27,46 @@ struct SettingsView: View {
                           sunrise: skySunrise,
                           sunset: skySunset)
 
-            ScrollView(.vertical) {
-                VStack(spacing: 20) {
-                    Text("Settings")
-                        .font(.serif(.largeTitle))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    VStack(spacing: 20) {
+                        Text("Settings")
+                            .font(.serif(.largeTitle))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
 
-                    textSizeCard
-                    appIconCard
-                    accessibilityCard
-                    unitsCard
-                    timeCard
-                    cardOrderCard
-                    homeScreenCard
-                    behaviorCard
-                    sourceCard
-                    aboutCard
+                        textSizeCard
+                        appIconCard
+                        accessibilityCard
+                        notificationsCard
+                            .id("notifications")
+                        unitsCard
+                        timeCard
+                        cardOrderCard
+                        homeScreenCard
+                        behaviorCard
+                        sourceCard
+                        aboutCard
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 28)
+                    // Pin the content's width to the scroll container: without this
+                    // a child with a wide intrinsic size (segmented pickers at large
+                    // type) widens the content and the vertical scroller starts
+                    // panning sideways.
+                    .containerRelativeFrame(.horizontal)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 28)
-                // Pin the content's width to the scroll container: without this
-                // a child with a wide intrinsic size (segmented pickers at large
-                // type) widens the content and the vertical scroller starts
-                // panning sideways.
-                .containerRelativeFrame(.horizontal)
+                .scrollIndicators(.hidden)
+                .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+                // Screenshot/automation hook, a sibling of -openSettings.
+                .onAppear {
+                    if ProcessInfo.processInfo.arguments.contains("-scrollToNotifications") {
+                        proxy.scrollTo("notifications", anchor: .top)
+                    }
+                }
             }
-            .scrollIndicators(.hidden)
-            .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
 
             // Content dissolves into the status bar instead of colliding with it.
             TopScrollBlur(maxRadius: 8, height: 72)
@@ -325,15 +335,14 @@ struct SettingsView: View {
         }
     }
 
-    private var behaviorCard: some View {
+    private var notificationsCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
-                CardLabel(systemImage: "gearshape", title: "Behavior")
+                CardLabel(systemImage: "bell", title: "Notifications")
 
-                settingToggle("Start from my location", isOn: $viewModel.useDeviceLocation)
+                settingToggle("Rain & advisories", isOn: $viewModel.notificationsEnabled)
                 Divider().overlay(Color.white.opacity(0.12))
-                settingToggle("Rain & advisory notifications", isOn: $viewModel.notificationsEnabled)
-                Divider().overlay(Color.white.opacity(0.12))
+
                 settingToggle("Morning digest", isOn: $viewModel.morningDigestEnabled)
                 if viewModel.morningDigestEnabled {
                     HStack {
@@ -348,7 +357,90 @@ struct SettingsView: View {
                     }
                 }
                 Divider().overlay(Color.white.opacity(0.12))
+
                 settingToggle("Golden-hour heads-up", isOn: $viewModel.goldenHourEnabled)
+                Divider().overlay(Color.white.opacity(0.12))
+
+                settingToggle("Sunset alerts", isOn: $viewModel.sunsetAlertEnabled)
+                if viewModel.sunsetAlertEnabled {
+                    sunAlertOptions(lead: $viewModel.sunsetAlertLeadMinutes,
+                                    gate: $viewModel.sunsetAlertGate)
+                }
+                Divider().overlay(Color.white.opacity(0.12))
+
+                settingToggle("Sunrise alerts", isOn: $viewModel.sunriseAlertEnabled)
+                if viewModel.sunriseAlertEnabled {
+                    sunAlertOptions(lead: $viewModel.sunriseAlertLeadMinutes,
+                                    gate: $viewModel.sunriseAlertGate)
+                }
+
+                Text("Sun alerts arrive ahead of the event, and only when its rating clears the bar you set. Great skies are rare; that's what makes the alert worth having.")
+                    .font(.serif(.caption))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Lead-time and quality-bar controls, shown while an alert is on. The
+    /// menus wear the app's serif rather than the system picker chrome.
+    private func sunAlertOptions(lead: Binding<Int>,
+                                 gate: Binding<SunQuality.AlertGate>) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            optionRow("Heads-up", value: Self.leadLabel(lead.wrappedValue)) {
+                Picker("Heads-up", selection: lead) {
+                    ForEach([15, 30, 45, 60], id: \.self) { minutes in
+                        Text(Self.leadLabel(minutes)).tag(minutes)
+                    }
+                }
+            }
+            .sensoryFeedback(.selection, trigger: lead.wrappedValue)
+
+            optionRow("Only when", value: gate.wrappedValue.label) {
+                Picker("Only when", selection: gate) {
+                    ForEach(SunQuality.AlertGate.allCases) { gate in
+                        Text(gate.label).tag(gate)
+                    }
+                }
+            }
+            .sensoryFeedback(.selection, trigger: gate.wrappedValue)
+        }
+        .padding(.leading, 2)
+    }
+
+    private static func leadLabel(_ minutes: Int) -> String {
+        minutes == 60 ? "1 hour before" : "\(minutes) min before"
+    }
+
+    private func optionRow(_ label: String, value: String,
+                           @ViewBuilder picker: () -> some View) -> some View {
+        HStack {
+            Text(label)
+                .font(.serif(.subheadline, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer()
+            Menu {
+                picker()
+            } label: {
+                HStack(spacing: 5) {
+                    Text(value)
+                        .font(.serif(.subheadline, weight: .semibold))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .opacity(0.6)
+                }
+                .foregroundStyle(.white)
+                .contentShape(Rectangle())
+            }
+        }
+    }
+
+    private var behaviorCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                CardLabel(systemImage: "gearshape", title: "Behavior")
+
+                settingToggle("Start from my location", isOn: $viewModel.useDeviceLocation)
                 Divider().overlay(Color.white.opacity(0.12))
                 settingToggle("Radar plays automatically", isOn: $viewModel.radarAutoplay)
                 Divider().overlay(Color.white.opacity(0.12))
