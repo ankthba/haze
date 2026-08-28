@@ -166,8 +166,9 @@ struct BottomStatusBar: View {
                         .minimumScaleFactor(0.85)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 14)
+            // Centered in its half so the pair reads as balanced around the
+            // divider instead of both clusters hugging their left edges.
+            .frame(maxWidth: .infinity, alignment: .center)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
