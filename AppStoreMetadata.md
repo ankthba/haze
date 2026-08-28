@@ -1,6 +1,6 @@
 # Haze — App Store Connect metadata
 
-Paste these into App Store Connect → your app → the **1.0** version page.
+Paste these into App Store Connect → your app → the **2.0** version page.
 
 ## Name (max 30)
 Haze
@@ -15,26 +15,47 @@ A calm, editorial weather app — big serif numerals, soft skies that shift with
 forecast,hourly,daily,minimal,widget,sunrise,sunset,uv,humidity,wind,pressure,air,quality,radar,rain
 
 ## Description (max 4000)
-Haze is a beautifully minimal weather app — an editorial take on the forecast, built around big serif numerals, soft adapting gradients, and calm whitespace. Every screen shifts with the sky: the background drifts from dawn to day to dusk to night, tinted by the current conditions, with a soft atmospheric haze along the horizon.
+Haze is a beautifully minimal weather app. What started as an editorial take on the forecast has become an app built around an emotional connection to your day: soft adapting gradients, calm forecasts, and rich insight into the days and weeks ahead. Every screen shifts with the sky: the background drifts from dawn to day to dusk to night, tinted by the current conditions.
 
-Accurate, no-nonsense data from Open-Meteo — a blend of the ECMWF, GFS, and ICON models — with no ads, no accounts, and nothing to clutter the view.
+Accurate, no-nonsense data: forecasts calibrated in the US against the National Blend of Models, the same guidance behind the official forecast, and checked against real weather-station observations. No ads, no accounts, nothing to clutter the view.
 
-FEATURES
+Features
 - Current conditions with feels-like, daily high/low, and a living sky that matches the exact moment
+- Live precipitation radar: scrub back through 12 hours of observed radar and ahead through the next 12 of forecast
 - Hourly forecast and a 72-hour temperature trend you can scrub by dragging your finger
-- Live precipitation radar — an animated map you can play or scrub through time
-- 10-day outlook — tap any day for a full hour-by-hour breakdown
+- 10-day outlook, with a full hour-by-hour breakdown a tap away on any day
+- Sunrise and sunset quality ratings, with optional alerts when a beautiful one is on the way
 - A sunrise and sunset arc you can scrub across the day, with a sun that glows from gold to deep amber
+- A daily brief in the app's editorial voice, plus rain, advisory, and morning notifications
+- A full Apple Watch app and complications, set in the same serif style
 - Wind compass, UV index, humidity, pressure, cloud cover, precipitation, dew point, and US air quality
 - A matching home-screen widget (small and medium) that refreshes on its own
-- Saved locations and your current location, with full state names
+- Saved locations and your current location, with support for cities and airports across the world
+- iCloud sync, so places and settings follow to a new phone
 - Switch between F/C and mph/km per hour
 
-Haze is built to be quiet and gorgeous — weather you actually enjoy looking at.
+Haze is built to be quiet and beautiful. Weather you actually enjoy looking at.
 
 Weather data by Open-Meteo.
 
-## What's New (release notes for 1.0)
+## What's New (release notes for 2.0)
+Haze 2.0 is a new app from top to bottom.
+
+A full redesign. Every screen speaks in one editorial voice: garamond serifs, big numerals, hairline rules, glass, and room to breathe. In light and dark, day and night.
+
+Live radar. A precipitation map with a real timeline. Scrub back through the last 12 hours of observed radar, then ahead through the next 12 of forecast, with smooth playback throughout.
+
+Apple Watch. A full watch app and complications, set in the same serif style.
+
+Sunrise and sunset, forecast. Every sunrise and sunset gets a quality rating built from the cloud layers. The home screen carries both the next sunset and the next sunrise, and optional alerts announce when a beautiful one is on the way.
+
+Sharper accuracy. Current conditions are checked against real weather stations nearby, so rain overhead shows as rain. In the US, forecasts follow the National Blend of Models, the same calibrated guidance behind the official forecast, so highs, lows, and rain chances stay honest across all ten days.
+
+Notifications. Rain starting soon, severe weather advisories, a morning brief, and sun alerts. Each one optional, each set in Settings.
+
+And more. A daily brief in the app's editorial voice, a refined welcome, iCloud sync for places and settings, richer detail sheets, a rebuilt settings screen, and dozens of refinements throughout.
+
+## What's New (release notes for 1.0, shipped)
 Welcome to Haze — a calm, beautiful weather app. This is our first release. Thank you for trying it.
 
 ## Support URL (REQUIRED — you must supply a reachable URL with a contact method)
