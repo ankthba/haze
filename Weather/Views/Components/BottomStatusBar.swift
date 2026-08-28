@@ -102,69 +102,54 @@ struct BottomStatusBar: View {
 
     // MARK: - Home: what the sky does next
 
-    /// At home the whole bar is the door to the sun quality page, the same way
-    /// the whole bar is the way home when browsing elsewhere.
+    /// At home the bar belongs to the sky entirely — the next sun event, its
+    /// verdict, and its score. "Your location" and the arrow are the away
+    /// state's furniture; here the whole bar is the door to the sun page.
     private var homeContent: some View {
         Button {
             Haptics.tap()
             onSunTap?()
         } label: {
             HStack(spacing: 14) {
-                circleBadge(active: false)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Your location")
-                        .font(.serif(.subheadline, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(bundle.place.subtitle.isEmpty ? bundle.place.name : bundle.place.subtitle)
-                        .font(.serif(.caption2, italic: true))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
                 if let sun = nextSunEvent {
-                    HStack(spacing: 8) {
-                        Image(systemName: sun.symbol)
-                            .symbolRenderingMode(.multicolor)
-                            .font(.system(size: 18))
+                    sunBadge(symbol: sun.kind.symbolName)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(sun.kind.rawValue)
+                            .font(.serif(.subheadline, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text("\(whenWord(for: sun)) at \(Fmt.time(sun.date, timezone: bundle.timezone))")
+                            .font(.serif(.caption2, italic: true))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if let rating = sun.rating {
                         VStack(alignment: .trailing, spacing: 0) {
-                            Text(sun.time)
-                                .font(.serif(.subheadline, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .fixedSize()
-                            // The one-word verdict rides along, in its tier's
-                            // color: the page behind the tap, in miniature.
-                            if let tier = sun.rating?.tier {
-                                (Text("\(sun.label) · ")
-                                    .foregroundStyle(.white.opacity(0.7))
-                                 + Text(tier.rawValue)
-                                    .foregroundStyle(tier.accent))
-                                    .font(.serif(.caption2))
-                                    .lineLimit(1)
-                                    .fixedSize()
-                            } else {
-                                Text(sun.label)
-                                    .font(.serif(.caption2))
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .lineLimit(1)
-                            }
-                        }
-                        if let rating = sun.rating {
                             Text("\(rating.score)")
                                 .font(.serif(.title3))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .fixedSize()
-                                .padding(.leading, 3)
+                            Text(rating.tier.rawValue)
+                                .font(.serif(.caption2, italic: true))
+                                .foregroundStyle(rating.tier.accent)
+                                .lineLimit(1)
+                                .fixedSize()
                         }
                     }
-                    // The readout is the point of the bar; the place name
-                    // yields to it rather than the other way round.
-                    .layoutPriority(1)
+                } else {
+                    // No sun times in the forecast (polar edge cases): fall
+                    // back to naming the place rather than an empty bar.
+                    circleBadge(active: false)
+                    Text(bundle.place.subtitle.isEmpty ? bundle.place.name : bundle.place.subtitle)
+                        .font(.serif(.subheadline, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
                 }
             }
             .padding(.leading, 12)
@@ -177,12 +162,36 @@ struct BottomStatusBar: View {
         .accessibilityHint("Shows sunrise and sunset quality ratings")
     }
 
-    private var homeAccessibilityLabel: String {
-        guard let sun = nextSunEvent else { return "Your location" }
-        if let rating = sun.rating {
-            return "\(sun.label) at \(sun.time), rated \(rating.score) out of 100, \(rating.tier.rawValue)"
+    /// The sun's own circle, standing where the location arrow stands when
+    /// the bar is the way home.
+    private func sunBadge(symbol: String) -> some View {
+        Image(systemName: symbol)
+            .symbolRenderingMode(.multicolor)
+            .font(.system(size: 19))
+            .frame(width: Self.circle, height: Self.circle)
+            .background(GlassSurface(shape: Circle()))
+            .clipShape(Circle())
+    }
+
+    /// "Tonight", "This morning", or "Tomorrow" — the word before "at 7:44".
+    private func whenWord(for sun: (kind: SunEvent.Kind, date: Date, rating: SunQuality.Rating?)) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = bundle.timezone
+        if cal.isDate(sun.date, inSameDayAs: Date()) {
+            return sun.kind == .sunset ? "Tonight" : "This morning"
         }
-        return "\(sun.label) at \(sun.time)"
+        return "Tomorrow"
+    }
+
+    private var homeAccessibilityLabel: String {
+        guard let sun = nextSunEvent else {
+            return bundle.place.subtitle.isEmpty ? bundle.place.name : bundle.place.subtitle
+        }
+        let when = "\(sun.kind.rawValue) \(whenWord(for: sun).lowercased()) at \(Fmt.time(sun.date, timezone: bundle.timezone))"
+        if let rating = sun.rating {
+            return "\(when), rated \(rating.score) out of 100, \(rating.tier.rawValue)"
+        }
+        return when
     }
 
     private func circleBadge(active: Bool) -> some View {
@@ -198,10 +207,9 @@ struct BottomStatusBar: View {
     /// Sunset while the sun is still up, sunrise once it's down — whichever is
     /// genuinely next, including tomorrow's sunrise late at night. Carries the
     /// event's quality rating when the forecast can support one.
-    private var nextSunEvent: (symbol: String, label: String, time: String,
+    private var nextSunEvent: (kind: SunEvent.Kind, date: Date,
                                rating: SunQuality.Rating?)? {
         let now = Date()
-        let tz = bundle.timezone
         let upcoming: [(Date, SunEvent.Kind)] = bundle.daily.prefix(2).flatMap { day -> [(Date, SunEvent.Kind)] in
             var events: [(Date, SunEvent.Kind)] = []
             if let sunrise = day.sunrise { events.append((sunrise, .sunrise)) }
@@ -213,6 +221,6 @@ struct BottomStatusBar: View {
             .min(by: { $0.0 < $1.0 })
         else { return nil }
         let rating = SunQuality.rate(kind: next.1, at: next.0, in: bundle)
-        return (next.1.symbolName, next.1.rawValue, Fmt.time(next.0, timezone: tz), rating)
+        return (next.1, next.0, rating)
     }
 }
