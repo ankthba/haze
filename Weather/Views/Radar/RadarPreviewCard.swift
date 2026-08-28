@@ -16,6 +16,10 @@ struct RadarPreviewCard: View {
 
     @State private var field: RadarField?
     @State private var failed = false
+    /// The place whose field has been fetched. The card lives in a LazyVStack,
+    /// so `.task` re-runs every time it scrolls back on screen — this keeps
+    /// that from refetching a field it already has.
+    @State private var loadedPlaceID: String?
 
     var body: some View {
         Button {
@@ -58,11 +62,19 @@ struct RadarPreviewCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Precipitation radar for \(place.name). Opens the full radar map.")
-        .task {
+        .task(id: place.id) {
+            guard loadedPlaceID != place.id else { return }
+            failed = false
             // Detailed radar only — no costly forecast-grid fetch on the home feed.
-            do { field = try await RadarService().buildField(center: place.coordinate,
-                                                             includeForecast: false) }
-            catch { failed = true }
+            do {
+                field = try await RadarService().buildField(center: place.coordinate,
+                                                            includeForecast: false)
+                loadedPlaceID = place.id
+            } catch {
+                // Scrolling off mid-fetch cancels the task; that's not a radar
+                // failure, and the next appearance retries cleanly.
+                if !Task.isCancelled { failed = true }
+            }
         }
     }
 }

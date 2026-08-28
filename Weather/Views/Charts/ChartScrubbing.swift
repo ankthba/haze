@@ -11,14 +11,19 @@ import SwiftUI
 import Charts
 import UIKit
 
-/// The little floating readout shown above the scrub line. Deliberately a SOLID
-/// dark slab (not a translucent material) — material backgrounds re-sample the
-/// blur every drag frame, which reads as a flicker while scrubbing.
+/// The little floating readout shown above the scrub line, finished in the same
+/// frosted glass as the app's buttons and panels. (An earlier build used a solid
+/// slab because SwiftUI *materials* re-snapshot their blur and flickered while
+/// dragging; GlassSurface blurs via a live CAFilter backdrop instead, which
+/// samples continuously and moves smoothly.) A soft inner shade keeps the white
+/// figures legible even over the brightest part of a day sky.
 struct ScrubReadout: View {
     let value: String
     var caption: String? = nil
     var detail: String? = nil
     var detailColor: Color = Color(hex: 0x9FD6FF)
+
+    private let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
 
     var body: some View {
         VStack(spacing: 2) {
@@ -28,7 +33,7 @@ struct ScrubReadout: View {
             if let caption {
                 Text(caption)
                     .font(.serif(.caption2))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(0.75))
             }
             if let detail {
                 Text(detail)
@@ -36,16 +41,14 @@ struct ScrubReadout: View {
                     .foregroundStyle(detailColor)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.black.opacity(0.92))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.white.opacity(0.14), lineWidth: 0.6)
-        )
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        // Exactly the surface the top-bar buttons wear — same frost, same live
+        // backdrop blur, same rim light. Nothing layered on top: an earlier
+        // darkening wash made it read as a different material.
+        .background(GlassSurface(shape: shape))
+        .clipShape(shape)
+        .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
         .fixedSize()
     }
 }

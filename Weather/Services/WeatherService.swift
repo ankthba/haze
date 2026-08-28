@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum WeatherError: LocalizedError {
+nonisolated enum WeatherError: LocalizedError {
     case badURL
     case requestFailed
     case decodingFailed
@@ -22,7 +22,10 @@ enum WeatherError: LocalizedError {
     }
 }
 
-struct WeatherService {
+/// `nonisolated` on purpose: the app defaults to main-actor isolation, and
+/// decoding a ten-day forecast and mapping its parallel arrays is real work that
+/// has no business happening on the thread that's drawing.
+nonisolated struct WeatherService {
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
@@ -30,32 +33,51 @@ struct WeatherService {
         return URLSession(configuration: config)
     }()
 
-    func fetch(for place: Place,
-               temperatureUnit: TemperatureUnit,
-               speedUnit: SpeedUnit,
-               precipUnit: PrecipUnit = .auto) async throws -> WeatherBundle {
-        async let forecast = fetchForecast(place: place,
-                                           temperatureUnit: temperatureUnit,
-                                           speedUnit: speedUnit,
-                                           precipUnit: precipUnit)
-        async let air = try? fetchAirQuality(place: place)
-        // Real station observation (US): forecast models routinely miss a storm
-        // that's overhead *right now*, so an observed active-weather condition
-        // overrides the modeled current code.
-        async let observed = fetchObservedCode(place: place)
-        let (raw, tz) = try await forecast
-        let aqi = await air ?? nil
-        let observedCode = await observed
+    /// Everything the screen needs to draw. Air quality and station
+    /// observations are deliberately *not* awaited here — they're a second
+    /// service and a three-request chain respectively, and waiting on them used
+    /// to hold the whole forecast off the screen. `fetchExtras` collects them
+    /// afterwards and they're folded into the bundle when they land.
+    func fetchForecast(for place: Place,
+                       temperatureUnit: TemperatureUnit,
+                       speedUnit: SpeedUnit,
+                       precipUnit: PrecipUnit = .auto) async throws -> WeatherBundle {
+        let (raw, tz) = try await fetchForecastResponse(place: place,
+                                                        temperatureUnit: temperatureUnit,
+                                                        speedUnit: speedUnit,
+                                                        precipUnit: precipUnit)
         return try transform(raw: raw, place: place, timezone: tz,
-                             airQuality: aqi, observedCode: observedCode)
+                             airQuality: nil, observedCode: nil)
+    }
+
+    struct Extras {
+        let airQuality: AirQuality?
+        /// A real station observation (US): forecast models routinely miss a
+        /// storm that's overhead *right now*, so an observed active-weather
+        /// condition overrides the modeled current code.
+        let observedCode: Int?
+        /// Active NWS advisories (US); nil when the fetch failed, empty when
+        /// it succeeded and there are none — the difference matters, because
+        /// an empty answer should clear a banner and a failure should not.
+        let alerts: [WeatherAlert]?
+        var isEmpty: Bool { airQuality == nil && observedCode == nil && alerts == nil }
+    }
+
+    func fetchExtras(for place: Place) async -> Extras {
+        async let air = try? fetchAirQuality(place: place)
+        async let observed = fetchObservedCode(place: place)
+        async let alerts = fetchAlerts(place: place)
+        return Extras(airQuality: await air ?? nil,
+                      observedCode: await observed,
+                      alerts: await alerts)
     }
 
     // MARK: - Forecast
 
-    private func fetchForecast(place: Place,
-                               temperatureUnit: TemperatureUnit,
-                               speedUnit: SpeedUnit,
-                               precipUnit: PrecipUnit) async throws -> (ForecastResponse, TimeZone) {
+    private func fetchForecastResponse(place: Place,
+                                       temperatureUnit: TemperatureUnit,
+                                       speedUnit: SpeedUnit,
+                                       precipUnit: PrecipUnit) async throws -> (ForecastResponse, TimeZone) {
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
             .init(name: "latitude", value: String(place.latitude)),
@@ -69,15 +91,23 @@ struct WeatherService {
             .init(name: "hourly", value: [
                 "temperature_2m", "relative_humidity_2m", "apparent_temperature",
                 "precipitation_probability", "precipitation", "weather_code",
-                "wind_speed_10m", "wind_direction_10m", "uv_index", "is_day"
+                "wind_speed_10m", "wind_direction_10m", "uv_index", "is_day",
+                "dew_point_2m", "visibility"
             ].joined(separator: ",")),
             .init(name: "daily", value: [
                 "weather_code", "temperature_2m_max", "temperature_2m_min",
                 "apparent_temperature_max", "apparent_temperature_min",
                 "sunrise", "sunset", "uv_index_max", "precipitation_sum",
                 "precipitation_probability_max", "wind_speed_10m_max",
-                "wind_gusts_10m_max", "wind_direction_10m_dominant"
+                "wind_gusts_10m_max", "wind_direction_10m_dominant",
+                "snowfall_sum"
             ].joined(separator: ",")),
+            // 15-minute nowcast for "rain starting around…" (12 steps = 3 h),
+            // and one past day for the yesterday comparison — both ride along
+            // on this same single request; no extra Open-Meteo calls.
+            .init(name: "minutely_15", value: "precipitation"),
+            .init(name: "forecast_minutely_15", value: "12"),
+            .init(name: "past_days", value: "1"),
             .init(name: "temperature_unit", value: temperatureUnit.apiValue),
             .init(name: "wind_speed_unit", value: speedUnit.apiValue),
             .init(name: "precipitation_unit", value: precipUnit.apiValue(temperatureUnit: temperatureUnit)),
@@ -212,6 +242,58 @@ struct WeatherService {
         return Self.activeCode(fromObservation: observation.properties.textDescription ?? "")
     }
 
+    // MARK: - Active alerts (NWS, US only)
+
+    /// The advisories in force at the place right now. Returns nil on failure
+    /// or outside the US, [] when the NWS answers and nothing is active.
+    /// Internal so the background check can ask for alerts *alone* instead of
+    /// paying for the whole extras fetch.
+    func fetchAlerts(place: Place) async -> [WeatherAlert]? {
+        let cc = place.countryCode?.uppercased()
+        guard cc == nil || cc == "US" else { return nil }
+
+        struct AlertsResponse: Decodable {
+            struct Feature: Decodable {
+                let id: String
+                let properties: Props
+            }
+            struct Props: Decodable {
+                let event: String?
+                let headline: String?
+                let severity: String?
+                let description: String?
+                let instruction: String?
+                let ends: String?
+                let expires: String?
+                let senderName: String?
+            }
+            let features: [Feature]
+        }
+
+        guard let url = URL(string:
+                "https://api.weather.gov/alerts/active?point=\(place.latitude),\(place.longitude)"),
+              let decoded: AlertsResponse = await getNWS(url)
+        else { return nil }
+
+        let iso = ISO8601DateFormatter()
+        let now = Date()
+        return decoded.features.compactMap { feature -> WeatherAlert? in
+            let p = feature.properties
+            guard let event = p.event else { return nil }
+            let ends = (p.ends ?? p.expires).flatMap { iso.date(from: $0) }
+            // NWS occasionally leaves expired alerts in the active feed briefly.
+            if let ends, ends < now { return nil }
+            return WeatherAlert(id: feature.id,
+                                event: event,
+                                headline: p.headline,
+                                severity: p.severity ?? "Unknown",
+                                details: p.description ?? "",
+                                instruction: p.instruction,
+                                ends: ends,
+                                source: p.senderName ?? "National Weather Service")
+        }
+    }
+
     private func getNWS<T: Decodable>(_ url: URL) async -> T? {
         var request = URLRequest(url: url)
         // api.weather.gov requires an identifying User-Agent.
@@ -284,19 +366,27 @@ struct WeatherService {
         // Current
         let c = raw.current
         let currentDate = parser.date(from: c.time) ?? Date()
+        // Parsed once and reused by both the UV lookup and the hourly series —
+        // 240 date parses, not 480.
+        let hourlyDates = raw.hourly.time.map { parser.date(from: $0) }
         // Open-Meteo's hourly arrays begin at local midnight, so `uvIndex.first`
         // is the overnight value (always 0). Read the UV from the hourly sample
         // closest to the current time instead.
-        let currentUV: Double? = {
+        let nearestHourIndex: Int? = {
             var best: (index: Int, delta: TimeInterval)?
-            for (i, timeString) in raw.hourly.time.enumerated() {
-                guard let t = parser.date(from: timeString) else { continue }
-                let delta = abs(t.timeIntervalSince(currentDate))
+            for (i, date) in hourlyDates.enumerated() {
+                guard let date else { continue }
+                let delta = abs(date.timeIntervalSince(currentDate))
                 if best == nil || delta < best!.delta { best = (i, delta) }
             }
-            if let best { return raw.hourly.uvIndex[safe: best.index] }
-            return raw.hourly.uvIndex.first
+            return best?.index
         }()
+        let currentUV = nearestHourIndex.flatMap { raw.hourly.uvIndex[safe: $0] }
+            ?? raw.hourly.uvIndex.first
+        // Dew point and visibility have no "current" variable; the nearest
+        // hourly sample is the honest stand-in.
+        let currentDew = nearestHourIndex.flatMap { raw.hourly.dewPoint?[safe: $0] }
+        let currentVisibility = nearestHourIndex.flatMap { raw.hourly.visibility?[safe: $0] }
         let current = CurrentWeather(
             date: currentDate,
             temperature: c.temperature,
@@ -311,15 +401,37 @@ struct WeatherService {
             windGust: c.windGust,
             windDirection: c.windDirection,
             uvIndex: currentUV,
-            visibility: nil,
-            dewPoint: nil
+            visibility: currentVisibility,
+            dewPoint: currentDew
         )
+
+        // The request carries past_days=1 for the yesterday comparison, so the
+        // hourly and daily arrays begin yesterday. The comparison numbers are
+        // pulled out here, and everything the rest of the app sees is filtered
+        // back to today-forward — exactly the shape it had before.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timezone
+        let todayStart = cal.startOfDay(for: currentDate)
+
+        // Yesterday's temperature at this same hour, for the comparison line.
+        let sameHourTarget = currentDate.addingTimeInterval(-24 * 3600)
+        let sameHourTemp: Double? = {
+            var best: (temp: Double, delta: TimeInterval)?
+            for (i, date) in hourlyDates.enumerated() {
+                guard let date, date < todayStart,
+                      let temp = raw.hourly.temperature[safe: i] else { continue }
+                let delta = abs(date.timeIntervalSince(sameHourTarget))
+                if best == nil || delta < best!.delta { best = (temp, delta) }
+            }
+            return best.map(\.temp)
+        }()
 
         // Hourly
         let h = raw.hourly
         var hours: [HourPoint] = []
+        hours.reserveCapacity(hourlyDates.count)
         for i in h.time.indices {
-            guard let date = parser.date(from: h.time[i]) else { continue }
+            guard let date = hourlyDates[safe: i] ?? nil, date >= todayStart else { continue }
             hours.append(HourPoint(
                 date: date,
                 temperature: h.temperature[safe: i] ?? 0,
@@ -335,12 +447,20 @@ struct WeatherService {
             ))
         }
 
-        // Daily
+        // Daily — the entry before today becomes the comparison record.
         let d = raw.daily
         var days: [DayForecast] = []
+        var yesterday: YesterdayComparison?
         for i in d.time.indices {
             guard let date = parser.date(from: d.time[i]) else { continue }
-            days.append(DayForecast(
+            if date < todayStart {
+                if let high = d.tempMax[safe: i], let low = d.tempMin[safe: i] {
+                    yesterday = YesterdayComparison(high: high, low: low,
+                                                   sameHourTemperature: sameHourTemp)
+                }
+                continue
+            }
+            var day = DayForecast(
                 date: date,
                 code: d.weatherCode[safe: i] ?? 0,
                 tempMax: d.tempMax[safe: i] ?? 0,
@@ -355,13 +475,27 @@ struct WeatherService {
                 windSpeedMax: d.windSpeedMax[safe: i] ?? 0,
                 windGustMax: d.windGustMax[safe: i] ?? 0,
                 windDirectionDominant: d.windDirectionDominant[safe: i] ?? 0
-            ))
+            )
+            day.snowfallSum = d.snowfallSum?[safe: i]
+            days.append(day)
+        }
+
+        // 15-minute nowcast steps, where the model covers this location.
+        let minutely: [MinutePoint]? = raw.minutely15.map { m in
+            var points: [MinutePoint] = []
+            points.reserveCapacity(m.time.count)
+            for i in m.time.indices {
+                guard let date = parser.date(from: m.time[i]),
+                      let precip = m.precipitation[safe: i] else { continue }
+                points.append(MinutePoint(date: date, precipitation: precip))
+            }
+            return points
         }
 
         var resolvedPlace = place
         resolvedPlace.timezone = timezone.identifier
 
-        return WeatherBundle(
+        var bundle = WeatherBundle(
             place: resolvedPlace,
             timezone: timezone,
             current: current,
@@ -370,6 +504,9 @@ struct WeatherService {
             airQuality: airQuality,
             fetchedAt: Date()
         )
+        bundle.minutely = minutely
+        bundle.yesterday = yesterday
+        return bundle
     }
 }
 
@@ -377,7 +514,7 @@ struct WeatherService {
 
 /// Open-Meteo returns local wall-clock times (e.g. "2026-06-04T15:00") without
 /// an offset. We anchor them to the location's timezone to get absolute Dates.
-struct LocalTimeParser {
+nonisolated struct LocalTimeParser {
     private let dateTimeFormatter: DateFormatter
     private let dateOnlyFormatter: DateFormatter
 
@@ -403,7 +540,7 @@ struct LocalTimeParser {
     }
 }
 
-private extension Array {
+nonisolated private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
     }

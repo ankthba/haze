@@ -112,11 +112,28 @@ struct SkyBackground: View {
 
             // The sky always carries a deepening scrim so white type reads
             // comfortably (this is the app's default look); the Increase
-            // Contrast setting strengthens it further.
-            Color.black.opacity(UIPrefs.shared.increaseContrast ? 0.38 : 0.22)
-                .ignoresSafeArea()
+            // Contrast setting strengthens it further. Bottom-weighted: the
+            // haze lightens the sky exactly where the day palette is already
+            // palest, and a flat scrim left the caption text down there under
+            // 2:1 contrast in daylight. The extra depth eases in below the
+            // fold, so the upper sky keeps its airiness.
+            LinearGradient(
+                stops: scrimStops(base: UIPrefs.shared.increaseContrast ? 0.38 : 0.22,
+                                  bottom: UIPrefs.shared.increaseContrast ? 0.55 : 0.40),
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
         }
         .animation(.easeInOut(duration: 1.1), value: condition.code)
+    }
+
+    private func scrimStops(base: Double, bottom: Double) -> [Gradient.Stop] {
+        [
+            .init(color: .black.opacity(base), location: 0),
+            .init(color: .black.opacity(base), location: 0.45),
+            .init(color: .black.opacity(base + (bottom - base) * 0.45), location: 0.72),
+            .init(color: .black.opacity(bottom), location: 1),
+        ]
     }
 
     // MARK: - Haze

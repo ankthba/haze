@@ -79,6 +79,12 @@ struct DetailsSection: View {
                               caption: "Moisture in the air")
                 }
 
+                if let visibility = current.visibility {
+                    metricRow("eye.fill", "Visibility",
+                              Fmt.visibility(visibility, unit: unit),
+                              caption: "How far you can see")
+                }
+
                 if let aqi = bundle.airQuality {
                     metricRow("aqi.medium", "Air Quality",
                               "\(aqi.usAQI)", unit: "AQI",
@@ -115,7 +121,7 @@ struct DetailsSection: View {
                     if let caption {
                         Text(caption)
                             .font(.serif(.caption))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.white.opacity(0.75))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
@@ -130,7 +136,7 @@ struct DetailsSection: View {
                     if let unit {
                         Text(unit)
                             .font(.serif(.subheadline, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(.white.opacity(0.75))
                     }
                 }
 

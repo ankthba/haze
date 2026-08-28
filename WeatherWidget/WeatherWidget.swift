@@ -18,33 +18,87 @@ struct WeatherEntry: TimelineEntry {
     let snapshot: WeatherWidgetSnapshot
 }
 
-struct WeatherProvider: TimelineProvider {
+struct WeatherProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> WeatherEntry {
         WeatherEntry(date: .now, snapshot: .placeholder)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (WeatherEntry) -> Void) {
-        completion(WeatherEntry(date: .now, snapshot: WeatherSnapshotStore.read() ?? .placeholder))
+    func snapshot(for configuration: WidgetPlaceIntent, in context: Context) async -> WeatherEntry {
+        if let pinned = configuration.place,
+           let cached = WeatherSnapshotStore.read(forPlaceID: pinned.id, unit: Self.unitPrefs().temperatureUnit) {
+            return WeatherEntry(date: .now, snapshot: cached)
+        }
+        return WeatherEntry(date: .now, snapshot: WeatherSnapshotStore.read() ?? .placeholder)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
-        // Fetch fresh data ourselves so the widget updates on WidgetKit's schedule
-        // even when the app hasn't been opened. Fall back to the last cached
-        // snapshot (written by the app or a previous fetch) on any failure.
-        Task {
-            let snapshot: WeatherWidgetSnapshot
-            if let location = WeatherSnapshotStore.readLocation(),
-               let fresh = await WidgetWeatherFetcher.fetch(location) {
-                WeatherSnapshotStore.cache(fresh)
-                snapshot = fresh
-            } else {
-                snapshot = WeatherSnapshotStore.read() ?? .placeholder
-            }
-            let next = Calendar.current.date(byAdding: .minute, value: 45, to: .now)
-                ?? .now.addingTimeInterval(2700)
-            completion(Timeline(entries: [WeatherEntry(date: .now, snapshot: snapshot)],
-                                policy: .after(next)))
+    /// The app's unit preferences, written on every load — never gated on the
+    /// device-location publish, so a saved-cities-only Celsius user doesn't get
+    /// Fahrenheit pinned widgets. The location record is the legacy fallback.
+    static func unitPrefs() -> WidgetUnitPrefs {
+        if let prefs = WeatherSnapshotStore.readUnitPrefs() { return prefs }
+        if let loc = WeatherSnapshotStore.readLocation() {
+            return WidgetUnitPrefs(temperatureUnit: loc.temperatureUnit,
+                                   windSpeedUnit: loc.windSpeedUnit,
+                                   precipitationUnit: loc.precipitationUnit)
         }
+        return WidgetUnitPrefs(temperatureUnit: "fahrenheit",
+                               windSpeedUnit: "mph", precipitationUnit: "inch")
+    }
+
+    func timeline(for configuration: WidgetPlaceIntent, in context: Context) async -> Timeline<WeatherEntry> {
+        let snapshot: WeatherWidgetSnapshot
+        if let pinned = configuration.place {
+            snapshot = await pinnedSnapshot(for: pinned)
+        } else {
+            snapshot = await deviceSnapshot()
+        }
+        let next = Calendar.current.date(byAdding: .minute, value: 45, to: .now)
+            ?? .now.addingTimeInterval(2700)
+        return Timeline(entries: [WeatherEntry(date: .now, snapshot: snapshot)],
+                        policy: .after(next))
+    }
+
+    /// Follow-the-device widgets read what the app publishes; the freshness
+    /// gate keeps a reload from re-fetching data the app wrote moments ago —
+    /// each publish reloads every placed widget, and without the gate that was
+    /// the exact multiplied-request pattern that once got the app rate-limited.
+    /// The 20-minute window sits well inside the 45-minute timeline policy, so
+    /// WidgetKit's own scheduled reloads (app closed) still fetch fresh data.
+    private func deviceSnapshot() async -> WeatherWidgetSnapshot {
+        if let cached = WeatherSnapshotStore.read(),
+           Date().timeIntervalSince(cached.updatedAt) < 20 * 60 {
+            return cached
+        }
+        if let location = WeatherSnapshotStore.readLocation(),
+           let fresh = await WidgetWeatherFetcher.fetch(location) {
+            WeatherSnapshotStore.cache(fresh)
+            return fresh
+        }
+        return WeatherSnapshotStore.read() ?? .placeholder
+    }
+
+    /// Pinned widgets fetch their own city (a single-location call), behind
+    /// the same 20-minute per-place gate. Unit preferences follow the app's,
+    /// and are baked into the cache key so a unit change refetches promptly.
+    private func pinnedSnapshot(for pinned: WidgetPlaceEntity) async -> WeatherWidgetSnapshot {
+        let prefs = Self.unitPrefs()
+        let unit = prefs.temperatureUnit
+        if let cached = WeatherSnapshotStore.read(forPlaceID: pinned.id, unit: unit),
+           Date().timeIntervalSince(cached.updatedAt) < 20 * 60 {
+            return cached
+        }
+        let location = WidgetLocation(latitude: pinned.latitude,
+                                      longitude: pinned.longitude,
+                                      name: pinned.name,
+                                      timezone: "auto",
+                                      temperatureUnit: prefs.temperatureUnit,
+                                      windSpeedUnit: prefs.windSpeedUnit,
+                                      precipitationUnit: prefs.precipitationUnit)
+        if let fresh = await WidgetWeatherFetcher.fetch(location) {
+            WeatherSnapshotStore.cache(fresh, forPlaceID: pinned.id, unit: unit)
+            return fresh
+        }
+        return WeatherSnapshotStore.read(forPlaceID: pinned.id, unit: unit) ?? .placeholder
     }
 }
 
@@ -52,16 +106,15 @@ struct WeatherProvider: TimelineProvider {
 
 struct WeatherWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: WeatherSnapshotStore.widgetKind,
-                            provider: WeatherProvider()) { entry in
+        AppIntentConfiguration(kind: WeatherSnapshotStore.widgetKind,
+                               intent: WidgetPlaceIntent.self,
+                               provider: WeatherProvider()) { entry in
             WeatherWidgetEntryView(snapshot: entry.snapshot)
-                .containerBackground(for: .widget) {
-                    WidgetCardBackground(hexes: entry.snapshot.skyHexes)
-                }
         }
         .configurationDisplayName("Haze")
-        .description("Your local forecast at a glance.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .description("Your local forecast at a glance. Edit the widget to pin a saved city.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
+                            .accessoryInline, .accessoryCircular, .accessoryRectangular])
         .contentMarginsDisabled()
     }
 }
@@ -72,10 +125,84 @@ struct WeatherWidgetEntryView: View {
 
     var body: some View {
         switch family {
-        case .systemSmall: SmallWidgetView(snapshot: snapshot)
-        case .systemLarge: LargeWidgetView(snapshot: snapshot)
-        default:           MediumWidgetView(snapshot: snapshot)
+        case .accessoryInline:
+            InlineAccessoryView(snapshot: snapshot)
+                .containerBackground(for: .widget) { Color.clear }
+        case .accessoryCircular:
+            CircularAccessoryView(snapshot: snapshot)
+                .containerBackground(for: .widget) { AccessoryWidgetBackground() }
+        case .accessoryRectangular:
+            RectangularAccessoryView(snapshot: snapshot)
+                .containerBackground(for: .widget) { Color.clear }
+        case .systemSmall:
+            SmallWidgetView(snapshot: snapshot)
+                .containerBackground(for: .widget) { WidgetCardBackground(hexes: snapshot.skyHexes) }
+        case .systemLarge:
+            LargeWidgetView(snapshot: snapshot)
+                .containerBackground(for: .widget) { WidgetCardBackground(hexes: snapshot.skyHexes) }
+        default:
+            MediumWidgetView(snapshot: snapshot)
+                .containerBackground(for: .widget) { WidgetCardBackground(hexes: snapshot.skyHexes) }
         }
+    }
+}
+
+// MARK: - Lock Screen accessories
+
+/// "72° Partly Cloudy" on one Lock Screen line.
+private struct InlineAccessoryView: View {
+    let snapshot: WeatherWidgetSnapshot
+
+    var body: some View {
+        // Inline widgets render a single Label; keep it terse.
+        Label("\(snapshot.temperatureText) \(snapshot.conditionText)",
+              systemImage: snapshot.conditionSymbol)
+    }
+}
+
+/// Condition glyph over the temperature, in the system's vibrant circle.
+private struct CircularAccessoryView: View {
+    let snapshot: WeatherWidgetSnapshot
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image(systemName: snapshot.conditionSymbol)
+                .font(.system(size: 14, weight: .medium))
+            Text(snapshot.temperatureText)
+                .font(.system(size: 18, weight: .semibold, design: .serif))
+        }
+        .widgetAccentable()
+    }
+}
+
+/// Place, condition, and range — the small widget's story in vibrant text.
+private struct RectangularAccessoryView: View {
+    let snapshot: WeatherWidgetSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                Text(snapshot.locationName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .widgetAccentable()
+
+            HStack(spacing: 5) {
+                Image(systemName: snapshot.conditionSymbol)
+                    .font(.system(size: 12))
+                Text(snapshot.temperatureText)
+                    .font(.system(size: 16, weight: .semibold, design: .serif))
+                Text(snapshot.highLowText)
+                    .font(.system(size: 12))
+                    .opacity(0.8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

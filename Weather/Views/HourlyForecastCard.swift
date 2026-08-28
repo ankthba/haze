@@ -27,6 +27,8 @@ struct HourlyForecastCard: View {
                     }
                     .padding(.horizontal, 2)
                 }
+                // One soft tick per hour column gliding by (42pt min + 22 gap).
+                .scrollTickHaptics(every: 64)
                 .horizontalFadeEdges()
             }
         }
@@ -63,5 +65,19 @@ private struct HourColumn: View {
                 .foregroundStyle(.white)
         }
         .frame(minWidth: 42)
+        // One VoiceOver stop per hour, with every value in context — not four
+        // floating fragments ("3PM", a symbol, "30%", "72°") per column.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        var parts = [isNow ? "Now" : Fmt.hour(hour.date, timezone: timezone),
+                     hour.condition.description]
+        if hour.precipitationProbability >= 10 {
+            parts.append("\(Fmt.percent(hour.precipitationProbability)) chance of precipitation")
+        }
+        parts.append(Fmt.tempDegree(hour.temperature))
+        return parts.joined(separator: ", ")
     }
 }

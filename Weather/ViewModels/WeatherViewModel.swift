@@ -28,6 +28,7 @@ final class WeatherViewModel {
     private static let hapticsKey = "haptics_enabled"
     static let radarAutoplayKey = "radar_autoplay"
     private static let showTrendKey = "show_trend_card"
+    private static let showBriefKey = "show_daily_brief"
     private static let showRadarPreviewKey = "show_radar_preview"
     private static let showWindKey = "show_wind_compass"
     private static let showSunKey = "show_sun_card"
@@ -65,19 +66,25 @@ final class WeatherViewModel {
 
     /// App-wide type scale, applied as a Dynamic Type size at the root so every
     /// serif font (they're all `relativeTo:` a text style) follows along.
+    /// `.system` (the default) passes the device's own setting through — which
+    /// is what makes the accessibility sizes AX1–AX5 reachable; a forced size
+    /// at the root would cap every low-vision user at .xxLarge.
     enum TextSize: String, CaseIterable, Identifiable {
-        case small, standard, large, extraLarge
+        case system, small, standard, large, extraLarge
         var id: String { rawValue }
         var label: String {
             switch self {
+            case .system: "Auto"
             case .small: "S"
             case .standard: "M"
             case .large: "L"
             case .extraLarge: "XL"
             }
         }
-        var dynamicTypeSize: DynamicTypeSize {
+        /// nil = don't override; inherit the system size.
+        var dynamicTypeSize: DynamicTypeSize? {
             switch self {
+            case .system: nil
             case .small: .medium
             case .standard: .large
             case .large: .xLarge
@@ -91,7 +98,39 @@ final class WeatherViewModel {
     let locationManager = LocationManager()
 
     private(set) var phase: Phase = .idle
-    private(set) var bundle: WeatherBundle?
+    private(set) var bundle: WeatherBundle? {
+        didSet { refreshDerived() }
+    }
+
+    // Derived once per reading rather than inside a view body. These walk the
+    // whole hourly series and do date formatting; evaluated per frame during a
+    // swipe (as they were, being computed properties of WeatherScreen) they
+    // were the swipe's stutter.
+    private(set) var nowcast: RainNowcast?
+    private(set) var briefText: String = ""
+    private(set) var rainLikelyToday = false
+
+    private func refreshDerived() {
+        guard let bundle else {
+            nowcast = nil
+            briefText = ""
+            rainLikelyToday = false
+            return
+        }
+        let usesInches = precipUnit.apiValue(temperatureUnit: temperatureUnit) == "inch"
+        nowcast = RainNowcast.compute(minutely: bundle.minutely,
+                                      wetThreshold: usesInches ? 0.005 : 0.12)
+        // The nowcast line under the hero already gives exact rain timing, so
+        // the brief skips it — two copies stacked read as a glitch.
+        briefText = DailyBrief.compose(bundle: bundle,
+                                       nowcast: showDailyBrief && nowcast != nil ? nil : nowcast,
+                                       usesFahrenheit: temperatureUnit == .fahrenheit)
+        let todays = bundle.upcomingHours.filter {
+            Fmt.isToday($0.date, timezone: bundle.timezone)
+        }
+        let pool = todays.isEmpty ? bundle.upcomingHours : todays
+        rainLikelyToday = (pool.map(\.precipitationProbability).max() ?? 0) >= 30
+    }
     private(set) var savedPlaces: [Place] = []
     var selectedPlace: Place?
 
@@ -109,10 +148,18 @@ final class WeatherViewModel {
     }
     private(set) var deviceSummary: DeviceSummary?
 
+    /// The in-flight follow-up fetch for air quality / observations.
+    private var enrichTask: Task<Void, Never>?
+
+    /// Stamped onto cached readings so a unit change never redraws old numbers.
+    private var cacheUnits: WeatherCache.Units {
+        WeatherCache.Units(temperature: temperatureUnit, speed: speedUnit, precip: precipUnit)
+    }
+
     var temperatureUnit: TemperatureUnit {
         didSet {
             guard oldValue != temperatureUnit else { return }
-            UserDefaults.standard.set(temperatureUnit.rawValue, forKey: Self.tempUnitKey)
+            UserDefaults.standard.set(temperatureUnit.rawValue, forKey: Self.tempUnitKey); CloudSync.push()
             Task { await reload() }
         }
     }
@@ -120,7 +167,7 @@ final class WeatherViewModel {
     var speedUnit: SpeedUnit {
         didSet {
             guard oldValue != speedUnit else { return }
-            UserDefaults.standard.set(speedUnit.rawValue, forKey: Self.speedUnitKey)
+            UserDefaults.standard.set(speedUnit.rawValue, forKey: Self.speedUnitKey); CloudSync.push()
             Task { await reload() }
         }
     }
@@ -128,13 +175,13 @@ final class WeatherViewModel {
     // MARK: - Appearance & behavior settings
 
     var textSize: TextSize {
-        didSet { UserDefaults.standard.set(textSize.rawValue, forKey: Self.textSizeKey) }
+        didSet { UserDefaults.standard.set(textSize.rawValue, forKey: Self.textSizeKey); CloudSync.push() }
     }
 
     var precipUnit: PrecipUnit {
         didSet {
             guard oldValue != precipUnit else { return }
-            UserDefaults.standard.set(precipUnit.rawValue, forKey: Self.precipUnitKey)
+            UserDefaults.standard.set(precipUnit.rawValue, forKey: Self.precipUnitKey); CloudSync.push()
             Fmt.precipUnit = precipUnit
             // Amounts are fetched in the requested unit, so refetch.
             Task { await reload() }
@@ -144,7 +191,7 @@ final class WeatherViewModel {
     var pressureUnit: PressureUnit {
         didSet {
             guard oldValue != pressureUnit else { return }
-            UserDefaults.standard.set(pressureUnit.rawValue, forKey: Self.pressureUnitKey)
+            UserDefaults.standard.set(pressureUnit.rawValue, forKey: Self.pressureUnitKey); CloudSync.push()
             Fmt.pressureUnit = pressureUnit
             // Display-side conversion; republish the bundle so rows re-render.
             Task { await reload() }
@@ -170,7 +217,7 @@ final class WeatherViewModel {
     var timeFormat: TimeFormat {
         didSet {
             guard oldValue != timeFormat else { return }
-            UserDefaults.standard.set(timeFormat.rawValue, forKey: Self.timeFormatKey)
+            UserDefaults.standard.set(timeFormat.rawValue, forKey: Self.timeFormatKey); CloudSync.push()
             Fmt.timeFormat = timeFormat
             // Republish the bundle so every time label re-renders in the new style.
             Task { await reload() }
@@ -185,28 +232,102 @@ final class WeatherViewModel {
     }
 
     var radarAutoplay: Bool {
-        didSet { UserDefaults.standard.set(radarAutoplay, forKey: Self.radarAutoplayKey) }
+        didSet { UserDefaults.standard.set(radarAutoplay, forKey: Self.radarAutoplayKey); CloudSync.push() }
+    }
+
+    /// Rain & advisory notifications via background refresh. Turning it on
+    /// asks for permission; a denial flips the toggle straight back so the UI
+    /// never claims something the system won't allow.
+    var notificationsEnabled: Bool {
+        didSet {
+            guard oldValue != notificationsEnabled else { return }
+            RainAlertsService.isEnabled = notificationsEnabled
+            if notificationsEnabled {
+                Task { [weak self] in
+                    let granted = await RainAlertsService.requestPermission()
+                    if !granted { self?.notificationsEnabled = false }
+                }
+            } else {
+                RainAlertsService.cancelScheduledChecks()
+            }
+        }
+    }
+
+    /// The daily brief as a notification, at the user's chosen time.
+    var morningDigestEnabled: Bool {
+        didSet {
+            guard oldValue != morningDigestEnabled else { return }
+            NotificationPlanner.digestEnabled = morningDigestEnabled
+            if morningDigestEnabled {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if await RainAlertsService.requestPermission() { replanNotifications() }
+                    else { morningDigestEnabled = false }
+                }
+            } else {
+                NotificationPlanner.cancelDigest()
+            }
+        }
+    }
+
+    /// When the digest arrives; only the hour and minute matter.
+    var digestTime: Date {
+        didSet {
+            let cal = Calendar.current
+            NotificationPlanner.digestMinutes =
+                cal.component(.hour, from: digestTime) * 60 + cal.component(.minute, from: digestTime)
+            replanNotifications()
+        }
+    }
+
+    /// "Golden hour soon" — twenty minutes before the light turns.
+    var goldenHourEnabled: Bool {
+        didSet {
+            guard oldValue != goldenHourEnabled else { return }
+            NotificationPlanner.goldenHourEnabled = goldenHourEnabled
+            if goldenHourEnabled {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if await RainAlertsService.requestPermission() { replanNotifications() }
+                    else { goldenHourEnabled = false }
+                }
+            } else {
+                NotificationPlanner.cancelGoldenHour()
+            }
+        }
+    }
+
+    /// Rebuild the scheduled notifications from the on-screen device bundle.
+    private func replanNotifications() {
+        guard let bundle, isShowingDeviceLocation || locationManager.isDenied else { return }
+        NotificationPlanner.refresh(bundle: bundle,
+                                    usesFahrenheit: temperatureUnit == .fahrenheit)
     }
 
     var showTrendCard: Bool {
-        didSet { UserDefaults.standard.set(showTrendCard, forKey: Self.showTrendKey) }
+        didSet { UserDefaults.standard.set(showTrendCard, forKey: Self.showTrendKey); CloudSync.push() }
+    }
+
+    /// The composed prose standfirst under the hero.
+    var showDailyBrief: Bool {
+        didSet { UserDefaults.standard.set(showDailyBrief, forKey: Self.showBriefKey); CloudSync.push() }
     }
 
     var showRadarPreview: Bool {
-        didSet { UserDefaults.standard.set(showRadarPreview, forKey: Self.showRadarPreviewKey) }
+        didSet { UserDefaults.standard.set(showRadarPreview, forKey: Self.showRadarPreviewKey); CloudSync.push() }
     }
 
     var showWindCompass: Bool {
-        didSet { UserDefaults.standard.set(showWindCompass, forKey: Self.showWindKey) }
+        didSet { UserDefaults.standard.set(showWindCompass, forKey: Self.showWindKey); CloudSync.push() }
     }
 
     var showSunCard: Bool {
-        didSet { UserDefaults.standard.set(showSunCard, forKey: Self.showSunKey) }
+        didSet { UserDefaults.standard.set(showSunCard, forKey: Self.showSunKey); CloudSync.push() }
     }
 
     var cardOrder: [HomeCard] {
         didSet {
-            UserDefaults.standard.set(cardOrder.map(\.rawValue), forKey: Self.cardOrderKey)
+            UserDefaults.standard.set(cardOrder.map(\.rawValue), forKey: Self.cardOrderKey); CloudSync.push()
         }
     }
 
@@ -224,13 +345,23 @@ final class WeatherViewModel {
             ?? .fahrenheit
         speedUnit = SpeedUnit(rawValue: defaults.string(forKey: Self.speedUnitKey) ?? "")
             ?? .mph
+        // Default to following the system setting; users who explicitly chose
+        // S/M/L/XL keep their stored choice.
         textSize = TextSize(rawValue: defaults.string(forKey: Self.textSizeKey) ?? "")
-            ?? .standard
+            ?? .system
         timeFormat = TimeFormat(rawValue: defaults.string(forKey: Self.timeFormatKey) ?? "")
             ?? .system
         hapticsEnabled = defaults.object(forKey: Self.hapticsKey) as? Bool ?? true
         radarAutoplay = defaults.object(forKey: Self.radarAutoplayKey) as? Bool ?? true
+        notificationsEnabled = RainAlertsService.isEnabled
+        morningDigestEnabled = NotificationPlanner.digestEnabled
+        goldenHourEnabled = NotificationPlanner.goldenHourEnabled
+        digestTime = Calendar.current.date(
+            bySettingHour: NotificationPlanner.digestMinutes / 60,
+            minute: NotificationPlanner.digestMinutes % 60,
+            second: 0, of: Date()) ?? Date()
         showTrendCard = defaults.object(forKey: Self.showTrendKey) as? Bool ?? true
+        showDailyBrief = defaults.object(forKey: Self.showBriefKey) as? Bool ?? true
         showRadarPreview = defaults.object(forKey: Self.showRadarPreviewKey) as? Bool ?? true
         showWindCompass = defaults.object(forKey: Self.showWindKey) as? Bool ?? true
         showSunCard = defaults.object(forKey: Self.showSunKey) as? Bool ?? true
@@ -260,9 +391,24 @@ final class WeatherViewModel {
 
     /// Decide what to show on first launch: device location, else last/first saved place.
     func bootstrap() async {
+        // Draw last session's reading straight away — the location fix and the
+        // network round trip then happen under real content instead of under a
+        // spinner. Anything that arrives after this replaces it in place.
+        if bundle == nil, let cached = await openingBundle() {
+            selectedPlace = cached.place
+            bundle = cached
+            phase = .loaded
+        }
         if useDeviceLocation, !locationManager.isDenied {
             await useCurrentLocation()
             if case .loaded = phase { return }
+            // The device place resolved but its fetch failed (network blip).
+            // Keep it selected while there's content on screen — refresh()
+            // recovers it when the network returns. Falling through here used
+            // to silently and stickily switch the app to a saved city. Only an
+            // actual location failure (isShowingDeviceLocation still false) or
+            // a truly empty screen goes on to the fallbacks.
+            if isShowingDeviceLocation, bundle != nil { return }
         }
         if let first = savedPlaces.first {
             await select(first)
@@ -274,8 +420,20 @@ final class WeatherViewModel {
         }
     }
 
+    /// What to draw before anything has been fetched: the cached forecast for
+    /// the place this launch is heading to (the remembered device location when
+    /// that's where we start), falling back to whatever was shown last.
+    private func openingBundle() async -> WeatherBundle? {
+        if useDeviceLocation, !locationManager.isDenied,
+           let known = locationManager.lastKnownPlace,
+           let cached = await WeatherCache.shared.bundle(for: known, units: cacheUnits) {
+            return cached
+        }
+        return await WeatherCache.shared.mostRecent(units: cacheUnits)
+    }
+
     func useCurrentLocation() async {
-        phase = .loading
+        if bundle == nil { phase = .loading }
         do {
             let place = try await locationManager.requestCurrentPlace()
             isShowingDeviceLocation = true
@@ -330,29 +488,100 @@ final class WeatherViewModel {
 
     private func load(place: Place, persist: Bool, showSpinner: Bool = true) async {
         selectedPlace = place
-        if showSpinner { phase = .loading }
+        // Everything after an await checks against these: if a newer selection
+        // or a unit change happened while this request was in flight, its
+        // response is stale and must not repaint the screen, retarget the
+        // widgets, or become the launch cache.
+        let requestedID = place.id
+        let requestedUnits = cacheUnits
+        // A previous load's enrich must not outlive this newer request.
+        enrichTask?.cancel()
+        // Switching places: show that place's last reading immediately rather
+        // than an empty screen while the network answers.
+        if bundle?.place.id != place.id,
+           let cached = await WeatherCache.shared.bundle(for: place, units: requestedUnits),
+           selectedPlace?.id == requestedID {
+            bundle = cached
+            phase = .loaded
+        } else if showSpinner, bundle == nil {
+            phase = .loading
+        }
         do {
-            let result = try await weatherService.fetch(
+            var result = try await weatherService.fetchForecast(
                 for: place,
                 temperatureUnit: temperatureUnit,
                 speedUnit: speedUnit,
                 precipUnit: precipUnit
             )
+            guard selectedPlace?.id == requestedID, cacheUnits == requestedUnits else { return }
+            // Alerts arrive via enrich, not the forecast — carry the on-screen
+            // ones forward (dropping any that have expired) so a reload doesn't
+            // blink the banner out, and a failed alerts re-fetch doesn't lose a
+            // warning that's still in force. A successful empty answer from
+            // enrich still clears it.
+            if bundle?.place.id == result.place.id {
+                result.alerts = bundle?.alerts?.filter { ($0.ends ?? .distantFuture) > Date() }
+            }
             bundle = result
             phase = .loaded
-            // Widgets follow the device location: browsing another city
-            // doesn't retarget them (unless location is unavailable, in which
-            // case they follow whatever's viewed so they're never stale).
-            if isShowingDeviceLocation || locationManager.isDenied {
-                WeatherWidgetSnapshot.publish(from: result,
-                                              temperatureUnit: temperatureUnit,
-                                              speedUnit: speedUnit,
-                                              precipUnit: precipUnit)
-            }
+            // Units always reach the widgets, even when the device-location
+            // snapshot publish below is gated off.
+            WeatherSnapshotStore.writeUnitPrefs(
+                temperatureUnit: temperatureUnit.apiValue,
+                windSpeedUnit: speedUnit.apiValue,
+                precipitationUnit: precipUnit.apiValue(temperatureUnit: temperatureUnit))
+            publishToWidgets(result)
             if persist { addSavedPlace(result.place) }
+            Task { await WeatherCache.shared.save(result, units: requestedUnits) }
+            enrich(result, units: requestedUnits)
         } catch {
+            // A stale request that fails must not stamp .failed over a newer
+            // selection's loaded screen.
+            guard selectedPlace?.id == requestedID, cacheUnits == requestedUnits else { return }
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// Air quality and the nearest station's observation, applied to the bundle
+    /// that's already on screen. Kept off the load path because the observation
+    /// is a three-request chain that used to gate the first paint.
+    ///
+    /// `units` is the load's own stamp, checked again when the extras land: the
+    /// chain can run for many seconds, and a °F bundle enriched after a flip to
+    /// °C must be dropped, not repainted, republished, and cached under a °C
+    /// stamp it doesn't match.
+    private func enrich(_ base: WeatherBundle, units: WeatherCache.Units) {
+        enrichTask?.cancel()
+        enrichTask = Task { [weak self] in
+            guard let self else { return }
+            let extras = await weatherService.fetchExtras(for: base.place)
+            guard !Task.isCancelled, !extras.isEmpty,
+                  let current = bundle, current.place.id == base.place.id,
+                  current.fetchedAt == base.fetchedAt,
+                  cacheUnits == units
+            else { return }
+            let enriched = current.applying(airQuality: extras.airQuality,
+                                            observedCode: extras.observedCode,
+                                            alerts: extras.alerts)
+            bundle = enriched
+            publishToWidgets(enriched)
+            Task { await WeatherCache.shared.save(enriched, units: units) }
+        }
+    }
+
+    /// Widgets follow the device location: browsing another city doesn't
+    /// retarget them (unless location is unavailable, in which case they follow
+    /// whatever's viewed so they're never stale).
+    private func publishToWidgets(_ bundle: WeatherBundle) {
+        guard isShowingDeviceLocation || locationManager.isDenied else { return }
+        WeatherWidgetSnapshot.publish(from: bundle,
+                                      temperatureUnit: temperatureUnit,
+                                      speedUnit: speedUnit,
+                                      precipUnit: precipUnit)
+        // Scheduled notifications ride the same device-place gate; the
+        // planner itself checks whether each one is enabled.
+        NotificationPlanner.refresh(bundle: bundle,
+                                    usesFahrenheit: temperatureUnit == .fahrenheit)
     }
 
     // MARK: - Search
@@ -367,12 +596,35 @@ final class WeatherViewModel {
         guard let data = UserDefaults.standard.data(forKey: Self.savedPlacesKey),
               let places = try? JSONDecoder().decode([Place].self, from: data) else { return }
         savedPlaces = places
+        // Keep the widget's picker in step even if the list last changed
+        // before the mirror existed.
+        WeatherSnapshotStore.writeSavedPlaces(places)
     }
 
     private func persistSavedPlaces() {
         if let data = try? JSONEncoder().encode(savedPlaces) {
             UserDefaults.standard.set(data, forKey: Self.savedPlacesKey)
         }
+        // Mirror for the widget's city picker, and up to iCloud for the
+        // user's other devices.
+        WeatherSnapshotStore.writeSavedPlaces(savedPlaces)
+        CloudSync.push()
+    }
+
+    /// Re-read local state after iCloud delivered newer values from another
+    /// device, and refresh what's on screen if the settings moved.
+    func adoptCloudChanges() {
+        let defaults = UserDefaults.standard
+        loadSavedPlaces()
+        let cloudTemp = TemperatureUnit(rawValue: defaults.string(forKey: Self.tempUnitKey) ?? "")
+        let cloudSpeed = SpeedUnit(rawValue: defaults.string(forKey: Self.speedUnitKey) ?? "")
+        let cloudPrecip = PrecipUnit(rawValue: defaults.string(forKey: Self.precipUnitKey) ?? "")
+        var unitsMoved = false
+        if let cloudTemp, cloudTemp != temperatureUnit { temperatureUnit = cloudTemp; unitsMoved = true }
+        if let cloudSpeed, cloudSpeed != speedUnit { speedUnit = cloudSpeed; unitsMoved = true }
+        if let cloudPrecip, cloudPrecip != precipUnit { precipUnit = cloudPrecip; unitsMoved = true }
+        // The unit didSets each kick a reload; nothing more to do here.
+        _ = unitsMoved
     }
 
     func addSavedPlace(_ place: Place) {

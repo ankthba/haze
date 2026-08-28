@@ -7,7 +7,15 @@
 
 import Foundation
 
-struct GeocodingService {
+nonisolated struct GeocodingService {
+    /// Own session so a stalled search gives up in seconds, not the shared
+    /// session's default sixty — a search spinner should never outlive patience.
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        return URLSession(configuration: config)
+    }()
+
     func search(_ query: String) async throws -> [Place] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return [] }
@@ -21,7 +29,7 @@ struct GeocodingService {
         ]
         guard let url = components?.url else { throw WeatherError.badURL }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw WeatherError.requestFailed
         }

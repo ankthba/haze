@@ -324,13 +324,27 @@ struct DayDetailView: View {
                                     .foregroundStyle(.white)
                             }
                             .frame(minWidth: 40)
+                            // One VoiceOver stop per hour, values in context.
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(hourAccessibilityText(hour))
                         }
                     }
                     .padding(.horizontal, 2)
                 }
+                .scrollTickHaptics(every: 62)
                 .horizontalFadeEdges()
             }
         }
+    }
+
+    private func hourAccessibilityText(_ hour: HourPoint) -> String {
+        var parts = [Fmt.hour(hour.date, timezone: timezone),
+                     hour.condition.description]
+        if hour.precipitationProbability >= 10 {
+            parts.append("\(Fmt.percent(hour.precipitationProbability)) chance of precipitation")
+        }
+        parts.append(Fmt.tempDegree(hour.temperature))
+        return parts.joined(separator: ", ")
     }
 }
 

@@ -333,12 +333,17 @@ struct MetricDetailView: View {
 
                                 Text(Fmt.speed(hour.windSpeed))
                                     .font(.serif(.caption2))
-                                    .foregroundStyle(.white.opacity(0.55))
+                                    .foregroundStyle(.white.opacity(0.7))
                             }
+                            // One stop per hour ("3 PM, SW, 12") — also silences
+                            // the per-hour "Arrow Up" from the rotated glyph.
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(Fmt.hour(hour.date, timezone: timezone)), \(Fmt.windDirectionLabel(hour.windDirection)), \(Fmt.speed(hour.windSpeed))")
                         }
                     }
                     .padding(.horizontal, 2)
                 }
+                .scrollTickHaptics(every: 58)
                 .horizontalFadeEdges()
 
                 Text("Arrows show the way the wind blows.")

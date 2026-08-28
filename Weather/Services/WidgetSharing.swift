@@ -88,12 +88,23 @@ struct WidgetLocation: Codable {
     let precipitationUnit: String
 }
 
+/// The saved-places mirror for the widget's city picker. Matches the widget's
+/// copy in `WeatherWidget/WidgetPlaceIntent.swift` — keep the two in sync.
+struct WidgetSavedPlace: Codable {
+    let id: String
+    let name: String
+    let subtitle: String
+    let latitude: Double
+    let longitude: Double
+}
+
 /// Reads/writes the snapshot in the shared App Group container.
 enum WeatherSnapshotStore {
     static let appGroup = "group.com.aniketh.Weather"
     static let widgetKind = "WeatherWidget"
     private static let key = "weather_widget_snapshot_v1"
     private static let locationKey = "weather_widget_location_v1"
+    private static let savedPlacesKey = "weather_widget_saved_places_v1"
 
     private static var defaults: UserDefaults? {
         UserDefaults(suiteName: appGroup)
@@ -112,6 +123,35 @@ enum WeatherSnapshotStore {
     static func writeLocation(_ location: WidgetLocation) {
         guard let defaults, let data = try? JSONEncoder().encode(location) else { return }
         defaults.set(data, forKey: locationKey)
+    }
+
+    /// Units-only record for pinned widgets, written on *every* load — the
+    /// full location record only follows the device place, so a saved-cities-
+    /// only user would otherwise never share their units. Matches the widget's
+    /// copy in `WeatherWidget/WidgetWeather.swift`.
+    static func writeUnitPrefs(temperatureUnit: String,
+                               windSpeedUnit: String,
+                               precipitationUnit: String) {
+        struct Prefs: Codable {
+            let temperatureUnit: String
+            let windSpeedUnit: String
+            let precipitationUnit: String
+        }
+        let prefs = Prefs(temperatureUnit: temperatureUnit,
+                          windSpeedUnit: windSpeedUnit,
+                          precipitationUnit: precipitationUnit)
+        guard let defaults, let data = try? JSONEncoder().encode(prefs) else { return }
+        defaults.set(data, forKey: "weather_widget_unit_prefs_v1")
+    }
+
+    /// Mirrors the saved-places list so pinned widgets can offer them.
+    static func writeSavedPlaces(_ places: [Place]) {
+        let mirrored = places.map {
+            WidgetSavedPlace(id: $0.id, name: $0.name, subtitle: $0.subtitle,
+                             latitude: $0.latitude, longitude: $0.longitude)
+        }
+        guard let defaults, let data = try? JSONEncoder().encode(mirrored) else { return }
+        defaults.set(data, forKey: savedPlacesKey)
     }
 }
 

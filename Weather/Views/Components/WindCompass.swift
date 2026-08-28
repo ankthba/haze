@@ -43,7 +43,7 @@ struct WindCompass: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title)
                 .font(.serif(.caption, weight: .medium))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white.opacity(0.75))
                 .frame(width: 44, alignment: .leading)
             Text(value)
                 .font(.serif(.body))
@@ -51,7 +51,7 @@ struct WindCompass: View {
             if !unitless {
                 Text(speedUnit.label)
                     .font(.serif(.caption2))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.75))
             }
         }
     }
@@ -100,7 +100,7 @@ struct WindCompass: View {
                     .font(.serif(size: 20))
                 Text(speedUnit.label)
                     .font(.serif(size: 12))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.75))
             }
             .foregroundStyle(.white)
         }

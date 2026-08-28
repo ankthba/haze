@@ -36,6 +36,7 @@ struct SettingsView: View {
                         .padding(.top, 4)
 
                     textSizeCard
+                    appIconCard
                     accessibilityCard
                     unitsCard
                     timeCard
@@ -191,6 +192,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 CardLabel(systemImage: "rectangle.grid.1x2", title: "Home Screen")
 
+                settingToggle("Daily brief", isOn: $viewModel.showDailyBrief)
+                Divider().overlay(Color.white.opacity(0.12))
                 settingToggle("72-hour trend chart", isOn: $viewModel.showTrendCard)
                 Divider().overlay(Color.white.opacity(0.12))
                 settingToggle("Radar preview", isOn: $viewModel.showRadarPreview)
@@ -217,22 +220,50 @@ struct SettingsView: View {
         .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
     }
 
+    /// When the device-wide accessibility setting is on, the row shows as on
+    /// and locks — the in-app toggle is an override for turning a behavior on,
+    /// never a way to fight the system setting off.
+    private func accessibilityToggle(_ label: String,
+                                     isOn: Binding<Bool>,
+                                     systemOn: Bool) -> some View {
+        settingToggle(label,
+                      isOn: systemOn ? .constant(true) : isOn)
+            .disabled(systemOn)
+    }
+
+    private var appIconCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                CardLabel(systemImage: "app.badge", title: "App Icon")
+                AppIconPicker()
+            }
+        }
+    }
+
     private var accessibilityCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
                 CardLabel(systemImage: "accessibility", title: "Accessibility")
 
-                settingToggle("Bold text", isOn: $prefs.boldText)
+                accessibilityToggle("Bold text",
+                                    isOn: $prefs.boldTextOverride,
+                                    systemOn: prefs.systemBoldText)
                 Divider().overlay(Color.white.opacity(0.12))
-                settingToggle("Increase contrast", isOn: $prefs.increaseContrast)
+                accessibilityToggle("Increase contrast",
+                                    isOn: $prefs.increaseContrastOverride,
+                                    systemOn: prefs.systemIncreaseContrast)
                 Divider().overlay(Color.white.opacity(0.12))
-                settingToggle("Reduce transparency", isOn: $prefs.reduceTransparency)
+                accessibilityToggle("Reduce transparency",
+                                    isOn: $prefs.reduceTransparencyOverride,
+                                    systemOn: prefs.systemReduceTransparency)
                 Divider().overlay(Color.white.opacity(0.12))
-                settingToggle("Reduce motion", isOn: $prefs.reduceMotion)
+                accessibilityToggle("Reduce motion",
+                                    isOn: $prefs.reduceMotionOverride,
+                                    systemOn: prefs.systemReduceMotion)
 
-                Text("Bold text weights up all type; contrast deepens the sky behind it; transparency solidifies the frosted surfaces; motion stills the radar and pulsing icons.")
+                Text("Bold text weights up all type; contrast deepens the sky behind it; transparency solidifies the frosted surfaces; motion stills the radar and pulsing icons. Device-wide accessibility settings apply automatically.")
                     .font(.serif(.caption))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -300,6 +331,24 @@ struct SettingsView: View {
                 CardLabel(systemImage: "gearshape", title: "Behavior")
 
                 settingToggle("Start from my location", isOn: $viewModel.useDeviceLocation)
+                Divider().overlay(Color.white.opacity(0.12))
+                settingToggle("Rain & advisory notifications", isOn: $viewModel.notificationsEnabled)
+                Divider().overlay(Color.white.opacity(0.12))
+                settingToggle("Morning digest", isOn: $viewModel.morningDigestEnabled)
+                if viewModel.morningDigestEnabled {
+                    HStack {
+                        Text("Arrives at")
+                            .font(.serif(.subheadline, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Spacer()
+                        DatePicker("Digest time", selection: $viewModel.digestTime,
+                                   displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                            .colorScheme(.dark)
+                    }
+                }
+                Divider().overlay(Color.white.opacity(0.12))
+                settingToggle("Golden-hour heads-up", isOn: $viewModel.goldenHourEnabled)
                 Divider().overlay(Color.white.opacity(0.12))
                 settingToggle("Radar plays automatically", isOn: $viewModel.radarAutoplay)
                 Divider().overlay(Color.white.opacity(0.12))

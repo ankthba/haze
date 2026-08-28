@@ -10,20 +10,20 @@
 import Foundation
 import SwiftUI
 
-struct WeatherWidgetHour: Codable, Hashable {
+nonisolated struct WeatherWidgetHour: Codable, Hashable {
     let time: String
     let symbol: String
     let temp: String
 }
 
-struct WeatherWidgetDay: Codable, Hashable {
+nonisolated struct WeatherWidgetDay: Codable, Hashable {
     let name: String
     let symbol: String
     let low: String
     let high: String
 }
 
-struct WeatherWidgetSnapshot: Codable, Hashable {
+nonisolated struct WeatherWidgetSnapshot: Codable, Hashable {
     let locationName: String
     let temperatureText: String
     let conditionSymbol: String
@@ -70,7 +70,7 @@ struct WeatherWidgetSnapshot: Codable, Hashable {
         updatedAt: .now)
 }
 
-enum WeatherSnapshotStore {
+nonisolated enum WeatherSnapshotStore {
     static let appGroup = "group.com.aniketh.Weather"
     static let widgetKind = "WeatherWidget"
     private static let key = "weather_widget_snapshot_v1"

@@ -21,12 +21,24 @@ struct RadarView: View {
 
     @State private var field: RadarField?
     @State private var frameIndex = 0
+    // Consults UIPrefs (not raw UserDefaults) so the system-wide Reduce Motion
+    // setting also opens the radar paused.
     @State private var isPlaying =
         (UserDefaults.standard.object(forKey: WeatherViewModel.radarAutoplayKey) as? Bool ?? true)
-        && !UserDefaults.standard.bool(forKey: UIPrefs.reduceMotionKey)
+        && !UIPrefs.shared.reduceMotion
     @State private var isScrubbing = false
     @State private var dwellTicks = 0
+    @State private var stallTicks = 0
+    /// Where playback began — "now" — and so where the growing loop restarts.
+    @State private var loopStart = 0
     @State private var failed = false
+    /// True once a pinch or drag has taken the map off its opening framing —
+    /// which is the only time the reset control has anything to do.
+    @State private var cameraMoved = false
+    @State private var resetToken = 0
+    /// Downloads every frame's tiles ahead of playback; playback steps only
+    /// onto frames it reports ready, so the first pass looks like the second.
+    @State private var prefetcher = RadarPrefetcher()
 
     private let service = RadarService()
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
@@ -47,6 +59,13 @@ struct RadarView: View {
         return times.map { ($0 - lo) / (hi - lo) }
     }
 
+    /// Frames whose tiles are downloaded. Before the prefetcher has learned the
+    /// tile set there's nothing to report, so the timeline shows every frame as
+    /// available rather than implying the whole loop is stuck loading.
+    private var bufferedFrames: Set<Int> {
+        prefetcher.isActive ? prefetcher.readyFrames : Set(frames.indices)
+    }
+
     /// Normalized position of "now" on the timeline (the past/forecast boundary).
     private var nowPosition: Double {
         let times = frames.map(\.time.timeIntervalSince1970)
@@ -62,7 +81,11 @@ struct RadarView: View {
                 RadarMapView(center: place.coordinate,
                              field: field,
                              currentIndex: frameIndex,
-                             isDay: isDay)
+                             isDay: isDay,
+                             prefetcher: prefetcher,
+                             isInteractive: true,
+                             resetToken: resetToken,
+                             onCameraMoved: { cameraMoved = $0 })
                     .ignoresSafeArea()
                     .transition(.opacity)
             } else if failed {
@@ -108,6 +131,8 @@ struct RadarView: View {
         }
         .colorScheme(.dark)
         .task { await load() }
+        .onDisappear { prefetcher.cancel() }
+        .onChange(of: frameIndex) { _, index in prefetcher.playbackIndex = index }
         .onReceive(tick) { _ in advance() }
         // Grabbing the scrubber parks playback where you leave it.
         .onChange(of: isScrubbing) { _, scrubbing in
@@ -128,6 +153,19 @@ struct RadarView: View {
                     .minimumScaleFactor(0.7)
             }
             Spacer(minLength: 12)
+            if cameraMoved {
+                Button {
+                    Haptics.tap()
+                    resetToken += 1
+                } label: {
+                    Image(systemName: "scope")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(CardButtonStyle())
+                .accessibilityLabel("Reset zoom")
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
             Button {
                 Haptics.tap()
                 dismiss()
@@ -139,6 +177,8 @@ struct RadarView: View {
             .buttonStyle(CardButtonStyle())
             .accessibilityLabel("Close radar")
         }
+        .animation(UIPrefs.shared.reduceMotion ? nil : .easeInOut(duration: 0.2),
+                   value: cameraMoved)
     }
 
     private var controls: some View {
@@ -174,6 +214,7 @@ struct RadarView: View {
                               index: $frameIndex,
                               nowPosition: nowPosition,
                               accent: accent,
+                              readyFrames: bufferedFrames,
                               isScrubbing: $isScrubbing)
             }
         }
@@ -197,27 +238,64 @@ struct RadarView: View {
 
     // MARK: - Playback
 
+    /// Tiles are downloaded in playback order from where the view opened, so
+    /// the hours nearest now land first. Rather than stalling at the edge of
+    /// what's downloaded, playback replays that stretch and the loop grows
+    /// outward as the rest of the timeline arrives — by the time it's all in,
+    /// this is an ordinary full-timeline loop.
     private func advance() {
         guard isPlaying, !isScrubbing, frames.count > 1 else { return }
+
         if frameIndex >= frames.count - 1 {
             // Linger on the latest forecast frame — that's the point of interest —
             // then loop back to the start.
             dwellTicks += 1
-            if dwellTicks >= 4 { dwellTicks = 0; frameIndex = 0 }
-        } else {
-            dwellTicks = 0
-            frameIndex += 1
+            guard dwellTicks >= 4, canShow(0) else { return }
+            step(to: 0)
+            return
         }
+
+        let next = frameIndex + 1
+        if prefetcher.isReady(next) {
+            step(to: next)
+            return
+        }
+
+        stallTicks += 1
+        // Loop back over the buffered stretch instead of freezing on a frame
+        // whose tiles are still in flight.
+        if stallTicks >= 2, frameIndex > loopStart, prefetcher.isReady(loopStart) {
+            step(to: loopStart)
+            return
+        }
+        // Nothing is arriving — a missing or very slow tile shouldn't strand
+        // the timeline, so move on and let the frame beneath cover the gap.
+        if stallTicks >= 12 { step(to: next) }
+    }
+
+    private func step(to index: Int) {
+        stallTicks = 0
+        dwellTicks = 0
+        frameIndex = index
+    }
+
+    private func canShow(_ index: Int) -> Bool {
+        if prefetcher.isReady(index) { return true }
+        stallTicks += 1
+        if stallTicks >= 12 { return true }
+        return false
     }
 
     private func load() async {
         failed = false
         do {
             let result = try await service.buildField(center: place.coordinate)
+            prefetcher.arm()
             field = result
             // Open on the latest observed (real-radar) frame, ~now; playback then
             // runs forward into the forecast.
             frameIndex = result.latestObservedIndex
+            loopStart = result.latestObservedIndex
         } catch {
             failed = true
         }
@@ -241,9 +319,17 @@ private struct RadarTimeline: View {
     @Binding var index: Int
     let nowPosition: Double
     let accent: Color
+    /// Frames whose tiles are downloaded — their ticks read brighter, so the
+    /// timeline shows how much of the loop is buffered.
+    let readyFrames: Set<Int>
     @Binding var isScrubbing: Bool
 
     private func pos(_ i: Int) -> Double { positions.indices.contains(i) ? positions[i] : 0 }
+
+    private func tickOpacity(_ i: Int) -> Double {
+        if i <= index { return 0 }                      // covered by the elapsed fill
+        return readyFrames.contains(i) ? 0.35 : 0.12    // buffered vs still loading
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -265,7 +351,7 @@ private struct RadarTimeline: View {
                 // Frame ticks (spaced by time)
                 ForEach(positions.indices, id: \.self) { i in
                     Circle()
-                        .fill(.white.opacity(i <= index ? 0.0 : 0.35))
+                        .fill(.white.opacity(tickOpacity(i)))
                         .frame(width: 2, height: 2)
                         .offset(x: width * positions[i] - 1)
                 }

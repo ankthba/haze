@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		D10000000000000000000008 /* WeatherWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D10000000000000000000001 /* WeatherWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D400000000000000000000F1 /* HazeWatchComplications.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D40000000000000000000002 /* HazeWatchComplications.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -17,6 +18,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = D10000000000000000000006;
 			remoteInfo = WeatherWidgetExtension;
+		};
+		D2000000000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 720852712FD1F989006307EE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 720852782FD1F989006307EE;
+			remoteInfo = Weather;
+		};
+		D4000000000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 720852712FD1F989006307EE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D40000000000000000000001;
+			remoteInfo = HazeWatchComplications;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -32,11 +47,25 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D30000000000000000000007 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D400000000000000000000F1 /* HazeWatchComplications.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		720852792FD1F989006307EE /* Weather.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = Weather.app; path = "Haze Weather.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D10000000000000000000001 /* WeatherWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WeatherWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D20000000000000000000002 /* WeatherTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WeatherTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D30000000000000000000002 /* HazeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HazeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D40000000000000000000002 /* HazeWatchComplications.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HazeWatchComplications.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -48,6 +77,21 @@
 		D10000000000000000000002 /* WeatherWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = WeatherWidget;
+			sourceTree = "<group>";
+		};
+		D20000000000000000000003 /* WeatherTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WeatherTests;
+			sourceTree = "<group>";
+		};
+		D30000000000000000000003 /* HazeWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HazeWatch;
+			sourceTree = "<group>";
+		};
+		D40000000000000000000003 /* HazeWatchComplications */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HazeWatchComplications;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -67,6 +111,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D20000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D40000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -76,6 +141,7 @@
 				7208527B2FD1F989006307EE /* Weather */,
 				D10000000000000000000002 /* WeatherWidget */,
 				7208527A2FD1F989006307EE /* Products */,
+				72C9610F3032604E00A94F42 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -83,9 +149,22 @@
 			isa = PBXGroup;
 			children = (
 				720852792FD1F989006307EE /* Weather.app */,
+				D30000000000000000000002 /* HazeWatch.app */,
+				D40000000000000000000002 /* HazeWatchComplications.appex */,
+				D20000000000000000000002 /* WeatherTests.xctest */,
 				D10000000000000000000001 /* WeatherWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		72C9610F3032604E00A94F42 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				D30000000000000000000003 /* HazeWatch */,
+				D40000000000000000000003 /* HazeWatchComplications */,
+				D20000000000000000000003 /* WeatherTests */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -137,6 +216,75 @@
 			productReference = D10000000000000000000001 /* WeatherWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		D20000000000000000000001 /* WeatherTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D20000000000000000000007 /* Build configuration list for PBXNativeTarget "WeatherTests" */;
+			buildPhases = (
+				D20000000000000000000004 /* Sources */,
+				D20000000000000000000005 /* Frameworks */,
+				D20000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D2000000000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D20000000000000000000003 /* WeatherTests */,
+			);
+			name = WeatherTests;
+			packageProductDependencies = (
+			);
+			productName = WeatherTests;
+			productReference = D20000000000000000000002 /* WeatherTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		D30000000000000000000001 /* HazeWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D3000000000000000000000D /* Build configuration list for PBXNativeTarget "HazeWatch" */;
+			buildPhases = (
+				D30000000000000000000004 /* Sources */,
+				D30000000000000000000005 /* Frameworks */,
+				D30000000000000000000006 /* Resources */,
+				D30000000000000000000007 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D4000000000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D30000000000000000000003 /* HazeWatch */,
+			);
+			name = HazeWatch;
+			packageProductDependencies = (
+			);
+			productName = HazeWatch;
+			productReference = D30000000000000000000002 /* HazeWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D40000000000000000000001 /* HazeWatchComplications */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D4000000000000000000000D /* Build configuration list for PBXNativeTarget "HazeWatchComplications" */;
+			buildPhases = (
+				D40000000000000000000004 /* Sources */,
+				D40000000000000000000005 /* Frameworks */,
+				D40000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D40000000000000000000003 /* HazeWatchComplications */,
+			);
+			name = HazeWatchComplications;
+			packageProductDependencies = (
+			);
+			productName = HazeWatchComplications;
+			productReference = D40000000000000000000002 /* HazeWatchComplications.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -170,6 +318,9 @@
 			projectRoot = "";
 			targets = (
 				720852782FD1F989006307EE /* Weather */,
+				D30000000000000000000001 /* HazeWatch */,
+				D40000000000000000000001 /* HazeWatchComplications */,
+				D20000000000000000000001 /* WeatherTests */,
 				D10000000000000000000006 /* WeatherWidgetExtension */,
 			);
 		};
@@ -184,6 +335,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D10000000000000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D40000000000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -207,6 +379,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D20000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D40000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -214,6 +407,16 @@
 			isa = PBXTargetDependency;
 			target = D10000000000000000000006 /* WeatherWidgetExtension */;
 			targetProxy = D10000000000000000000009 /* PBXContainerItemProxy */;
+		};
+		D2000000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 720852782FD1F989006307EE /* Weather */;
+			targetProxy = D2000000000000000000000B /* PBXContainerItemProxy */;
+		};
+		D4000000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D40000000000000000000001 /* HazeWatchComplications */;
+			targetProxy = D4000000000000000000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -337,8 +540,10 @@
 		720852852FD1F98B006307EE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDusk AppIconNight AppIconDawn";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Weather.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
@@ -348,6 +553,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HazeInfo.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "haze°";
 				INFOPLIST_KEY_CFBundleName = "haze°";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -384,8 +590,10 @@
 		720852862FD1F98B006307EE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconDusk AppIconNight AppIconDawn";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Weather.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
@@ -395,6 +603,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HazeInfo.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "haze°";
 				INFOPLIST_KEY_CFBundleName = "haze°";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -491,6 +700,170 @@
 			};
 			name = Release;
 		};
+		D20000000000000000000008 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.WeatherTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Haze Weather.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Haze Weather";
+			};
+			name = Debug;
+		};
+		D20000000000000000000009 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.WeatherTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Haze Weather.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Haze Weather";
+			};
+			name = Release;
+		};
+		D3000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HazeWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "haze°";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.aniketh.Weather;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		D3000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HazeWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "haze°";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.aniketh.Weather;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
+		D4000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HazeWatchComplications.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Haze;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather.watchkitapp.complications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		D4000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HazeWatchComplications.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Haze;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather.watchkitapp.complications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -517,6 +890,33 @@
 			buildConfigurations = (
 				D1000000000000000000000B /* Debug */,
 				D1000000000000000000000C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D20000000000000000000007 /* Build configuration list for PBXNativeTarget "WeatherTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D20000000000000000000008 /* Debug */,
+				D20000000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D3000000000000000000000D /* Build configuration list for PBXNativeTarget "HazeWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D3000000000000000000000E /* Debug */,
+				D3000000000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D4000000000000000000000D /* Build configuration list for PBXNativeTarget "HazeWatchComplications" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D4000000000000000000000E /* Debug */,
+				D4000000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

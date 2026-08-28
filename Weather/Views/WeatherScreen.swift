@@ -13,21 +13,24 @@ struct WeatherScreen: View {
     @Binding var showSearch: Bool
     @Binding var showSettings: Bool
     @Binding var showRadar: Bool
+    /// Room to leave at the foot for the floating city panel, which now lives
+    /// above this screen in the carousel.
+    var bottomInset: CGFloat = 0
 
     @State private var selectedDay: DayForecast?
+    @State private var showAlerts = false
     @State private var topBarOpacity: Double = 1
 
     private var condition: WeatherCondition { bundle.current.condition }
 
-    /// True when there's a meaningful chance of rain during the rest of *today*.
-    /// Drives both the dedicated rain card and de-duping the trend underlay.
-    private var rainLikelyToday: Bool {
-        let todays = bundle.upcomingHours.filter {
-            Fmt.isToday($0.date, timezone: bundle.timezone)
-        }
-        let pool = todays.isEmpty ? bundle.upcomingHours : todays
-        return (pool.map(\.precipitationProbability).max() ?? 0) >= 30
-    }
+    private var activeAlerts: [WeatherAlert] { bundle.alerts ?? [] }
+
+    // Rain timing, the brief's prose, and today's rain likelihood are derived
+    // once per reading by the view model — computing them here made every
+    // frame of a city swipe re-walk the hourly series.
+    private var nowcast: RainNowcast? { viewModel.nowcast }
+    private var briefText: String { viewModel.briefText }
+    private var rainLikelyToday: Bool { viewModel.rainLikelyToday }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -37,22 +40,56 @@ struct WeatherScreen: View {
                           sunset: bundle.today?.sunset)
 
             ScrollView {
-                VStack(spacing: 36) {
-                    CurrentConditionsView(bundle: bundle, unit: viewModel.temperatureUnit)
-                        .padding(.bottom, 14)
+                // Lazy so the first frame only builds what's actually on screen.
+                // The radar preview in particular stands up a whole MKMapView
+                // and starts pulling tiles; below the fold, that shouldn't be
+                // competing with the forecast for the launch.
+                LazyVStack(spacing: 36) {
+                    // The brief rides directly under the hero as one unit, so
+                    // the first card arrives a comfortable scroll sooner.
+                    VStack(spacing: 14) {
+                        CurrentConditionsView(bundle: bundle,
+                                              unit: viewModel.temperatureUnit,
+                                              nowcastLine: nowcast?.sentence(timezone: bundle.timezone))
+                        if viewModel.showDailyBrief {
+                            DailyBriefCard(text: briefText)
+                        }
+                    }
+                    .padding(.bottom, -6)
 
                     ForEach(viewModel.cardOrder) { card in
                         homeCard(card)
                     }
 
+                    // Editorial share affordance — a colophon line, not chrome.
+                    ShareLink(item: ForecastShareCard(bundle: bundle),
+                              preview: SharePreview(
+                                "\(bundle.place.name) — \(Fmt.tempDegree(bundle.current.temperature)), \(condition.description)")) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .medium))
+                            Text("Share today's page")
+                                .font(.serif(.subheadline, weight: .medium))
+                        }
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule().strokeBorder(.white.opacity(0.3), lineWidth: 0.8)
+                        )
+                        .contentShape(Capsule())
+                    }
+                    .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
+                    .padding(.top, 6)
+
                     Text(Fmt.updatedStamp(bundle.fetchedAt, timezone: bundle.timezone))
                         .font(.serif(.caption))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.white.opacity(0.75))
                         .padding(.top, 4)
 
                     Text("Data from Open-Meteo, blending ECMWF, GFS & ICON models")
                         .font(.serif(.caption2))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(.white.opacity(0.7))
                         .padding(.bottom, 8)
                 }
                 .padding(.horizontal, 22)
@@ -74,6 +111,11 @@ struct WeatherScreen: View {
             // the scroll view, so the progressive top blur can sit *beneath* the
             // (still-sharp) buttons.
             .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+            // And room at the foot for the city panel, so the last card can
+            // always be scrolled clear of it.
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: bottomInset)
+            }
 
             // Content eases into a progressive blur at both screen edges: sharp in
             // the middle, dissolving softly into the status bar above and refracting
@@ -87,27 +129,31 @@ struct WeatherScreen: View {
             // Floating top controls, kept crisp above the blur.
             topBar
 
-            // While browsing another place, a glass panel offers the way home:
-            // the device location's weather, one tap to return.
-            if let summary = viewModel.deviceSummary, !viewModel.isShowingDeviceLocation {
-                VStack {
-                    Spacer()
-                    currentLocationPanel(summary)
-                }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 10)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.85),
-                   value: viewModel.deviceSummary == nil)
+                   value: bundle.place.id)
         .colorScheme(.dark)
+        // Keep the rain Live Activity in step with the nowcast while the app
+        // is in front (starting one requires foreground anyway).
+        .onAppear { syncRainActivity() }
+        .onChange(of: bundle.fetchedAt) { syncRainActivity() }
         .sheet(item: $selectedDay) { day in
             DayDetailView(day: day,
                           bundle: bundle,
                           unit: viewModel.temperatureUnit,
                           speedUnit: viewModel.speedUnit)
         }
+        .sheet(isPresented: $showAlerts) {
+            AlertDetailView(alerts: activeAlerts)
+        }
+    }
+
+    private func syncRainActivity() {
+        RainActivityManager.sync(
+            nowcast: nowcast,
+            bundle: bundle,
+            usesInches: viewModel.precipUnit
+                .apiValue(temperatureUnit: viewModel.temperatureUnit) == "inch")
     }
 
     /// One reorderable block of the main screen, in the user's chosen order.
@@ -148,53 +194,6 @@ struct WeatherScreen: View {
         }
     }
 
-    /// The signature-material panel showing home's weather while away.
-    private func currentLocationPanel(_ summary: WeatherViewModel.DeviceSummary) -> some View {
-        Button {
-            Haptics.tap()
-            Task { await viewModel.useCurrentLocation() }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "location.fill")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(summary.place.name)
-                        .font(.serif(.body, weight: .medium))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text("Back to your location")
-                        .font(.serif(.caption, italic: true))
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-
-                Spacer(minLength: 10)
-
-                Image(systemName: summary.condition.symbolName)
-                    .symbolRenderingMode(.multicolor)
-                    .font(.system(size: 20))
-
-                Text(Fmt.tempDegree(summary.temperature))
-                    .font(.serif(.title3))
-                    .foregroundStyle(.white)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(
-                GlassSurface(shape: RoundedRectangle(cornerRadius: 26, style: .continuous),
-                             blurRadius: 16)
-            )
-            .shadow(color: .black.opacity(0.12), radius: 14, y: 5)
-            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
     private var topBar: some View {
         HStack {
             Button {
@@ -205,8 +204,17 @@ struct WeatherScreen: View {
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(CardButtonStyle())
+            .accessibilityLabel("Locations")
 
-            Spacer()
+            // An advisory takes the whole span between the controls, at the
+            // same height and in the same family, rather than pushing the page
+            // down or shrink-wrapping to its text.
+            if !activeAlerts.isEmpty {
+                AlertPill(alerts: activeAlerts) { showAlerts = true }
+                    .padding(.horizontal, 10)
+            } else {
+                Spacer()
+            }
 
             Button {
                 showRadar = true
@@ -226,6 +234,7 @@ struct WeatherScreen: View {
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(CardButtonStyle())
+            .accessibilityLabel("Settings")
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 22)

@@ -45,7 +45,7 @@ struct PrecipChanceCard: View {
                                  yStart: .value("Chance", 0),
                                  yEnd: .value("Chance", selected.precipitationProbability))
                             .lineStyle(StrokeStyle(lineWidth: 1))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(.white.opacity(0.75))
                             .annotation(position: .top, spacing: 8,
                                         overflowResolution: .init(x: .fit(to: .chart),
                                                                   y: .fit(to: .chart))) {
@@ -63,7 +63,7 @@ struct PrecipChanceCard: View {
                             if let p = value.as(Int.self) {
                                 Text("\(p)%")
                                     .font(.serif(.caption2))
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(.white.opacity(0.75))
                             }
                         }
                     }
@@ -75,7 +75,7 @@ struct PrecipChanceCard: View {
                             if let date = value.as(Date.self) {
                                 Text(Fmt.hour(date, timezone: bundle.timezone))
                                     .font(.serif(.caption2))
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(.white.opacity(0.75))
                             }
                         }
                     }
@@ -86,7 +86,7 @@ struct PrecipChanceCard: View {
                 Text(peak < 5 ? "Dry through the next 24 hours"
                               : "Peak \(Fmt.percent(peak)) chance over the next 24 hours")
                     .font(.serif(.caption))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.75))
             }
         }
     }

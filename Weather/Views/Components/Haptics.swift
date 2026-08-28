@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import SwiftUI
 
 enum Haptics {
     /// Master switch, driven by the Settings toggle (persisted by the view model).
@@ -29,6 +30,13 @@ enum Haptics {
     static func success() {
         guard isEnabled else { return }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// The faintest tick, for content gliding under the finger — soft and low
+    /// intensity so a fast scroll reads as a texture, not a drumroll.
+    static func scrollTick() {
+        guard isEnabled else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.45)
     }
 
     // MARK: - Choreographed patterns (onboarding)
@@ -63,5 +71,35 @@ enum Haptics {
             try? await Task.sleep(for: .milliseconds(220))
             UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.45)
         }
+    }
+}
+
+// MARK: - Scroll ticks
+
+/// A soft haptic tick each time another column passes under the finger while a
+/// horizontal strip scrolls — the paper texture of flipping through hours.
+private struct ScrollTickHaptics: ViewModifier {
+    /// Distance between ticks: one column width including spacing.
+    let stride: CGFloat
+    @State private var tick = 0
+
+    func body(content: Content) -> some View {
+        content.onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.x }) { old, new in
+            guard stride > 0, old != new else { return }
+            // Rubber-banding at the leading edge oscillates around zero; ticks
+            // only count inside real content so the bounce stays silent.
+            guard new > 0, old > 0 else { tick = 0; return }
+            let newTick = Int((new / stride).rounded(.down))
+            guard newTick != tick else { return }
+            tick = newTick
+            Haptics.scrollTick()
+        }
+    }
+}
+
+extension View {
+    /// Ticks softly every `stride` points of horizontal scroll.
+    func scrollTickHaptics(every stride: CGFloat) -> some View {
+        modifier(ScrollTickHaptics(stride: stride))
     }
 }

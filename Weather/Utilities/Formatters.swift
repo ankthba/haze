@@ -8,14 +8,14 @@
 import Foundation
 
 /// User-selectable clock style; `.system` follows the device's locale setting.
-enum TimeFormat: String, CaseIterable {
+nonisolated enum TimeFormat: String, CaseIterable {
     case system
     case twelveHour
     case twentyFourHour
 }
 
 /// Rain amounts: `.auto` follows the temperature unit (°F → inches, °C → mm).
-enum PrecipUnit: String, CaseIterable {
+nonisolated enum PrecipUnit: String, CaseIterable, Codable {
     case auto, inch, mm
 
     /// The Open-Meteo API value, given the current temperature unit.
@@ -29,7 +29,7 @@ enum PrecipUnit: String, CaseIterable {
 }
 
 /// Barometric pressure display unit (data always arrives as hPa).
-enum PressureUnit: String, CaseIterable {
+nonisolated enum PressureUnit: String, CaseIterable {
     case hPa, inHg
 
     var label: String {
@@ -71,65 +71,109 @@ enum Fmt {
         }
     }
 
+    /// Visibility arrives from the API in metres; shown as miles alongside °F,
+    /// kilometres alongside °C.
+    static func visibility(_ meters: Double, unit: TemperatureUnit) -> String {
+        if unit == .fahrenheit {
+            let miles = meters / 1609.344
+            return miles >= 10 ? "10+ mi" : String(format: "%.1f mi", miles)
+        }
+        let km = meters / 1000
+        return km >= 16 ? "16+ km" : String(format: "%.1f km", km)
+    }
+
     static func precip(_ value: Double, unit: TemperatureUnit) -> String {
         precipUnit.apiValue(temperatureUnit: unit) == "inch"
             ? String(format: "%.2f in", value)
             : String(format: "%.1f mm", value)
     }
 
-    static func hour(_ date: Date, timezone: TimeZone) -> String {
+    /// Building a `DateFormatter` costs far more than using one, and these are
+    /// called per row of every hourly strip, daily list and chart — so each
+    /// distinct (style, timezone, clock setting, locale) is built once and kept.
+    private static var formatters: [String: DateFormatter] = [:]
+    private static var calendars: [String: Calendar] = [:]
+
+    /// The device's 24-Hour Time toggle changes `hourCycle` but *not* the
+    /// locale identifier, and a built formatter never re-resolves it — so it's
+    /// part of the key, and the whole cache also flushes on any locale-prefs
+    /// change (calendar, first weekday, …) as a catch-all.
+    private static let localeChangeObserver: Void = {
+        NotificationCenter.default.addObserver(
+            forName: NSLocale.currentLocaleDidChangeNotification,
+            object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                formatters.removeAll()
+                calendars.removeAll()
+            }
+        }
+    }()
+
+    private static func formatter(_ style: String,
+                                  timezone: TimeZone,
+                                  configure: (DateFormatter) -> Void) -> DateFormatter {
+        _ = localeChangeObserver
+        let locale = Locale.current
+        let key = "\(style)|\(timezone.identifier)|\(timeFormat.rawValue)|\(locale.identifier)|\(locale.hourCycle)"
+        if let cached = formatters[key] { return cached }
         let f = DateFormatter()
         f.timeZone = timezone
-        f.locale = .current
-        switch timeFormat {
-        case .system:         f.setLocalizedDateFormatFromTemplate("ha")
-        case .twelveHour:     f.dateFormat = "ha"
-        case .twentyFourHour: f.dateFormat = "HH"
+        f.locale = locale
+        configure(f)
+        formatters[key] = f
+        return f
+    }
+
+    private static func calendar(_ timezone: TimeZone) -> Calendar {
+        let key = "\(timezone.identifier)|\(Locale.current.identifier)"
+        if let cached = calendars[key] { return cached }
+        var cal = Calendar.current
+        cal.timeZone = timezone
+        calendars[key] = cal
+        return cal
+    }
+
+    static func hour(_ date: Date, timezone: TimeZone) -> String {
+        let f = formatter("hour", timezone: timezone) { f in
+            switch timeFormat {
+            case .system:         f.setLocalizedDateFormatFromTemplate("ha")
+            case .twelveHour:     f.dateFormat = "ha"
+            case .twentyFourHour: f.dateFormat = "HH"
+            }
         }
         return f.string(from: date).replacingOccurrences(of: " ", with: "")
     }
 
     static func time(_ date: Date, timezone: TimeZone) -> String {
-        let f = DateFormatter()
-        f.timeZone = timezone
-        f.locale = .current
-        switch timeFormat {
-        case .system:         f.timeStyle = .short
-        case .twelveHour:     f.dateFormat = "h:mm a"
-        case .twentyFourHour: f.dateFormat = "HH:mm"
+        let f = formatter("time", timezone: timezone) { f in
+            switch timeFormat {
+            case .system:         f.timeStyle = .short
+            case .twelveHour:     f.dateFormat = "h:mm a"
+            case .twentyFourHour: f.dateFormat = "HH:mm"
+            }
         }
         return f.string(from: date)
     }
 
     static func weekday(_ date: Date, timezone: TimeZone) -> String {
-        let f = DateFormatter()
-        f.timeZone = timezone
-        f.locale = .current
-        f.dateFormat = "EEE"
-        return f.string(from: date)
+        formatter("weekday", timezone: timezone) { $0.dateFormat = "EEE" }
+            .string(from: date)
     }
 
     static func fullWeekday(_ date: Date, timezone: TimeZone) -> String {
-        let f = DateFormatter()
-        f.timeZone = timezone
-        f.locale = .current
-        f.dateFormat = "EEEE"
-        return f.string(from: date)
+        formatter("fullWeekday", timezone: timezone) { $0.dateFormat = "EEEE" }
+            .string(from: date)
     }
 
     /// Masthead date line, e.g. "Thursday, June 4".
     static func longDate(_ date: Date, timezone: TimeZone) -> String {
-        let f = DateFormatter()
-        f.timeZone = timezone
-        f.locale = .current
-        f.setLocalizedDateFormatFromTemplate("EEEEMMMMd")
-        return f.string(from: date)
+        formatter("longDate", timezone: timezone) { $0.setLocalizedDateFormatFromTemplate("EEEEMMMMd") }
+            .string(from: date)
     }
 
     static func isToday(_ date: Date, timezone: TimeZone) -> Bool {
-        var cal = Calendar.current
-        cal.timeZone = timezone
-        return cal.isDateInToday(date)
+        calendar(timezone).isDateInToday(date)
     }
 
     /// "Updated 3:42 PM" style stamp.

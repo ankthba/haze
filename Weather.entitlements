@@ -6,5 +6,11 @@
 	<array>
 		<string>group.com.aniketh.Weather</string>
 	</array>
+	<!-- Two capabilities are deliberately NOT listed here: an entitlement that
+	     isn't registered on the App ID fails the device build outright. Each is
+	     one checkbox in Signing & Capabilities, and the code for both is already
+	     in place and inert until then:
+	       • iCloud → Key-value storage   (CloudSync: saved places + settings)
+	       • Time Sensitive Notifications (urgent weather advisories) -->
 </dict>
 </plist>

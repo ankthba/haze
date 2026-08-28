@@ -12,7 +12,7 @@ import WidgetKit
 
 // MARK: - Location shared from the app (matches the app's copy in WidgetSharing)
 
-struct WidgetLocation: Codable {
+nonisolated struct WidgetLocation: Codable {
     let latitude: Double
     let longitude: Double
     let name: String
@@ -22,12 +22,27 @@ struct WidgetLocation: Codable {
     let precipitationUnit: String
 }
 
+/// Units-only record, written by the app on every successful load — unlike the
+/// device-location record, which only follows the device place. Matches the
+/// app's copy in `Weather/Services/WidgetSharing.swift`.
+nonisolated struct WidgetUnitPrefs: Codable {
+    let temperatureUnit: String
+    let windSpeedUnit: String
+    let precipitationUnit: String
+}
+
 extension WeatherSnapshotStore {
     private static var locationKey: String { "weather_widget_location_v1" }
+    private static var unitPrefsKey: String { "weather_widget_unit_prefs_v1" }
 
     static func readLocation() -> WidgetLocation? {
         guard let data = UserDefaults(suiteName: appGroup)?.data(forKey: locationKey) else { return nil }
         return try? JSONDecoder().decode(WidgetLocation.self, from: data)
+    }
+
+    static func readUnitPrefs() -> WidgetUnitPrefs? {
+        guard let data = UserDefaults(suiteName: appGroup)?.data(forKey: unitPrefsKey) else { return nil }
+        return try? JSONDecoder().decode(WidgetUnitPrefs.self, from: data)
     }
 
     static func cache(_ snapshot: WeatherWidgetSnapshot) {

@@ -125,9 +125,55 @@ struct SunArcCard: View {
                     Spacer()
                     label("Sunset", sunset)
                 }
+
+                // The sky's small print: tonight's moon and the golden hour.
+                Divider().overlay(Color.white.opacity(0.12))
+
+                HStack(alignment: .top) {
+                    moonLabel
+                    Spacer()
+                    goldenHourLabel
+                }
             }
         }
         .animation(.easeOut(duration: 0.25), value: scrubProgress != nil)
+    }
+
+    private var moonLabel: some View {
+        let moon = MoonPhase.current()
+        return HStack(spacing: 8) {
+            Image(systemName: moon.symbolName)
+                .font(.system(size: 15))
+                .foregroundStyle(.white.opacity(0.85))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(moon.name)
+                    .font(.serif(.subheadline, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                Text("\(Int((moon.illumination * 100).rounded()))% lit")
+                    .font(.serif(.caption2))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(moon.name), \(Int((moon.illumination * 100).rounded())) percent illuminated")
+    }
+
+    @ViewBuilder
+    private var goldenHourLabel: some View {
+        // Only while the window is still ahead or under way — an elapsed
+        // golden hour shown at midnight reads as a mistake.
+        if let window = GoldenHour.evening(sunset: sunset),
+           window.upperBound > Date() {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("Golden hour")
+                    .font(.serif(.caption2))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text("\(Fmt.time(window.lowerBound, timezone: timezone)) – \(Fmt.time(window.upperBound, timezone: timezone))")
+                    .font(.serif(.subheadline, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private func handleScrub(_ progress: Double) {
@@ -150,7 +196,7 @@ struct SunArcCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.serif(.caption2))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white.opacity(0.75))
             Text(date.map { Fmt.time($0, timezone: timezone) } ?? "—")
                 .font(.serif(.subheadline, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))

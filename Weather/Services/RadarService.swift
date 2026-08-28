@@ -38,7 +38,7 @@ struct RadarField {
     }
 }
 
-struct RadarService {
+nonisolated struct RadarService {
     private static let iemBase = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0"
     /// RainViewer palette for the non-US fallback (6 = NEXRAD Level-III).
     private static let rainViewerScheme = 6

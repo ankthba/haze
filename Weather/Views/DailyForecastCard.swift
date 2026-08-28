@@ -86,7 +86,7 @@ private struct DayRow: View {
 
             Text(Fmt.tempDegree(day.tempMin))
                 .font(.serif(.body))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.white.opacity(0.75))
                 .frame(width: 32, alignment: .trailing)
 
             TemperatureRangeBar(

@@ -157,7 +157,7 @@ struct OpenBadge: View {
             Image(systemName: "arrow.up.right")
         }
         .font(.serif(.caption, weight: .semibold))
-        .foregroundStyle(.white.opacity(0.6))
+        .foregroundStyle(.white.opacity(0.75))
     }
 }
 
@@ -175,7 +175,7 @@ struct CardLabel: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(.white.opacity(0.6))
+        .foregroundStyle(.white.opacity(0.75))
         .padding(.bottom, 4)
     }
 }

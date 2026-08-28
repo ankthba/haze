@@ -262,9 +262,12 @@ struct OnboardingView: View {
                 .sensoryFeedback(.selection, trigger: viewModel.textSize)
             }
 
-            comfortToggle("Bold text", isOn: $prefs.boldText)
-            comfortToggle("Increase contrast", isOn: $prefs.increaseContrast)
-            comfortToggle("Reduce motion", isOn: $prefs.reduceMotion)
+            comfortToggle("Bold text", isOn: $prefs.boldTextOverride,
+                          systemOn: prefs.systemBoldText)
+            comfortToggle("Increase contrast", isOn: $prefs.increaseContrastOverride,
+                          systemOn: prefs.systemIncreaseContrast)
+            comfortToggle("Reduce motion", isOn: $prefs.reduceMotionOverride,
+                          systemOn: prefs.systemReduceMotion)
         }
     }
 
@@ -317,8 +320,12 @@ struct OnboardingView: View {
         .padding(.vertical, 4)
     }
 
-    private func comfortToggle(_ label: String, isOn: Binding<Bool>) -> some View {
-        Toggle(isOn: isOn) {
+    /// A device-wide accessibility setting shows as on and locks — same
+    /// treatment as Settings, so the toggle never contradicts what's already
+    /// visibly true on this very screen.
+    private func comfortToggle(_ label: String, isOn: Binding<Bool>,
+                               systemOn: Bool = false) -> some View {
+        Toggle(isOn: systemOn ? .constant(true) : isOn) {
             Text(label)
                 .font(.serif(.subheadline, weight: .medium))
                 .foregroundStyle(.white)
@@ -326,6 +333,7 @@ struct OnboardingView: View {
         .tint(.white.opacity(0.35))
         .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
         .padding(.vertical, 2)
+        .disabled(systemOn)
     }
 
     // MARK: - Controls

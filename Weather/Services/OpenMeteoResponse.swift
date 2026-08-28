@@ -13,11 +13,20 @@ struct ForecastResponse: Decodable {
     let current: Current
     let hourly: Hourly
     let daily: Daily
+    /// 15-minute precipitation for the next ~3 h; optional because the model
+    /// only covers some regions and the key is absent elsewhere.
+    let minutely15: Minutely15?
 
     enum CodingKeys: String, CodingKey {
         case timezone
         case utcOffsetSeconds = "utc_offset_seconds"
         case current, hourly, daily
+        case minutely15 = "minutely_15"
+    }
+
+    struct Minutely15: Decodable {
+        let time: [String]
+        let precipitation: [Double]
     }
 
     struct Current: Decodable {
@@ -62,6 +71,10 @@ struct ForecastResponse: Decodable {
         let windDirection: [Double]
         let uvIndex: [Double]
         let isDay: [Int]
+        /// Optional: these two joined the request later, and absence must not
+        /// fail the whole decode.
+        let dewPoint: [Double]?
+        let visibility: [Double]?
 
         enum CodingKeys: String, CodingKey {
             case time
@@ -75,6 +88,8 @@ struct ForecastResponse: Decodable {
             case windDirection = "wind_direction_10m"
             case uvIndex = "uv_index"
             case isDay = "is_day"
+            case dewPoint = "dew_point_2m"
+            case visibility
         }
     }
 
@@ -93,6 +108,8 @@ struct ForecastResponse: Decodable {
         let windSpeedMax: [Double]
         let windGustMax: [Double]
         let windDirectionDominant: [Double]
+        /// Optional for the same forward-compatibility reason as the hourly pair.
+        let snowfallSum: [Double]?
 
         enum CodingKeys: String, CodingKey {
             case time
@@ -108,6 +125,7 @@ struct ForecastResponse: Decodable {
             case windSpeedMax = "wind_speed_10m_max"
             case windGustMax = "wind_gusts_10m_max"
             case windDirectionDominant = "wind_direction_10m_dominant"
+            case snowfallSum = "snowfall_sum"
         }
     }
 }

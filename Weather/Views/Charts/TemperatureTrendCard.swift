@@ -85,7 +85,7 @@ struct TemperatureTrendCard: View {
                     if let now = points.first {
                         RuleMark(x: .value("Now", now.date))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(.white.opacity(0.7))
                     }
 
                     if let selected {
@@ -96,7 +96,7 @@ struct TemperatureTrendCard: View {
                                  yStart: .value("Base", tempRange.lowerBound),
                                  yEnd: .value("Temp", selected.temperature))
                             .lineStyle(StrokeStyle(lineWidth: 1))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.white.opacity(0.75))
                         PointMark(x: .value("Time", selected.date),
                                   y: .value("Temp", selected.temperature))
                             .foregroundStyle(.white)
@@ -121,7 +121,7 @@ struct TemperatureTrendCard: View {
                             if let t = value.as(Double.self) {
                                 Text(Fmt.tempDegree(t))
                                     .font(.serif(.caption2))
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(.white.opacity(0.75))
                             }
                         }
                     }
@@ -133,7 +133,7 @@ struct TemperatureTrendCard: View {
                             if let date = value.as(Date.self) {
                                 Text(Fmt.hour(date, timezone: bundle.timezone))
                                     .font(.serif(.caption2))
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(.white.opacity(0.75))
                             }
                         }
                     }

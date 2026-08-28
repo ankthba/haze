@@ -14,7 +14,7 @@ import UIKit
 
 struct VariableBlurView: UIViewRepresentable {
     /// The edge the blur is strongest at; it fades to sharp toward the opposite side.
-    enum Direction { case top, bottom, leading, trailing }
+    enum Direction: Hashable { case top, bottom, leading, trailing }
 
     var maxRadius: CGFloat = 16
     var direction: Direction = .bottom
@@ -92,7 +92,20 @@ final class VariableBlurUIView: UIVisualEffectView {
     /// (no blur) at the opposite edge. The ramp follows a *smoothstep* curve so
     /// the blur eases in with zero slope at the sharp end — no perceptible hard
     /// line where it begins, just a gradual dissolve into more blur.
+    /// Rasterizing the ramp means standing up a SwiftUI render pass, and it's
+    /// the same four images forever — so each direction is drawn once and kept.
+    /// (Every scrim in the app re-applies its filter on appearance and on any
+    /// trait change, which used to redraw this each time.)
+    private static var maskCache: [VariableBlurView.Direction: CGImage] = [:]
+
     private static func gradientMask(direction: VariableBlurView.Direction) -> CGImage? {
+        if let cached = maskCache[direction] { return cached }
+        let image = renderGradientMask(direction: direction)
+        if let image { maskCache[direction] = image }
+        return image
+    }
+
+    private static func renderGradientMask(direction: VariableBlurView.Direction) -> CGImage? {
         let (start, end): (UnitPoint, UnitPoint)
         switch direction {
         case .bottom:   (start, end) = (.top, .bottom)
