@@ -43,6 +43,15 @@ struct SunEventsView: View {
         events.first { $0.id == selectedID } ?? events.first
     }
 
+    /// The next sunset and the next sunrise, in the order they'll arrive —
+    /// the pair the switcher at the top of the page offers.
+    private var nextPair: [SunEvent] {
+        var pair: [SunEvent] = []
+        if let sunset = events.first(where: { $0.kind == .sunset }) { pair.append(sunset) }
+        if let sunrise = events.first(where: { $0.kind == .sunrise }) { pair.append(sunrise) }
+        return pair.sorted { $0.date < $1.date }
+    }
+
     var body: some View {
         ZStack {
             SunSkyGradient(kind: featured?.kind ?? .sunset,
@@ -51,6 +60,9 @@ struct SunEventsView: View {
 
             ScrollView {
                 VStack(spacing: 26) {
+                    if nextPair.count > 1 {
+                        eventSwitcher
+                    }
                     if let event = featured {
                         header(event)
                         statRow(event)
@@ -81,6 +93,12 @@ struct SunEventsView: View {
         .presentationDragIndicator(.visible)
         .presentationBackground(.clear)
         .animation(.easeInOut(duration: 0.45), value: selectedID)
+        // Screenshot/automation hook: open with the sunrise side selected.
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-showSunrise") {
+                selectedID = events.first { $0.kind == .sunrise }?.id
+            }
+        }
     }
 
     // MARK: - Top bar
@@ -105,13 +123,65 @@ struct SunEventsView: View {
         }
     }
 
+    // MARK: - Event switcher
+
+    /// Both upcoming events side by side, each wearing its own score; tapping
+    /// one hands it the rest of the page. The friend deciding tonight whether
+    /// tomorrow's sunrise deserves an alarm sees both answers at once.
+    private var eventSwitcher: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(nextPair.enumerated()), id: \.element.id) { index, event in
+                let isSelected = event.id == featured?.id
+                Button {
+                    Haptics.selection()
+                    selectedID = event.id
+                } label: {
+                    VStack(spacing: 3) {
+                        Text("\(dayLabel(event.date))'s \(event.kind.rawValue.lowercased())")
+                            .font(.serif(.subheadline, italic: true,
+                                         weight: isSelected ? .semibold : .regular))
+                        if let rating = event.rating {
+                            (Text("\(rating.score) · ")
+                             + Text(rating.tier.rawValue))
+                                .font(.serif(.caption))
+                        } else {
+                            Text(Fmt.time(event.date, timezone: timezone))
+                                .font(.serif(.caption))
+                        }
+                    }
+                    .foregroundStyle(.white.opacity(isSelected ? 1 : 0.5))
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilitySummary(event))
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+
+                if index == 0 {
+                    Rectangle()
+                        .fill(.white.opacity(0.22))
+                        .frame(width: 0.6, height: 30)
+                }
+            }
+        }
+        .padding(.top, 6)
+    }
+
     // MARK: - Headline
+
+    /// The switcher above already names the featured event, so the headline's
+    /// own title only appears for a day picked from the list below.
+    private var featuredIsInPair: Bool {
+        nextPair.contains { $0.id == featured?.id }
+    }
 
     private func header(_ event: SunEvent) -> some View {
         VStack(spacing: 0) {
-            Text("\(dayLabel(event.date))'s \(event.kind.rawValue.lowercased())")
-                .font(.serif(.subheadline, italic: true))
-                .foregroundStyle(.white.opacity(0.8))
+            if !featuredIsInPair {
+                Text("\(dayLabel(event.date))'s \(event.kind.rawValue.lowercased())")
+                    .font(.serif(.subheadline, italic: true))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
 
             if let rating = event.rating {
                 Text("\(rating.score)")
