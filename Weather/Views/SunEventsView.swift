@@ -146,48 +146,47 @@ struct SunEventsView: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: - Stat row
+    // MARK: - Stat grid
 
-    /// The event's vitals in one hairline-divided line: when, where on the
-    /// horizon to look, when the light turns golden, and the day's span.
+    /// The event's vitals, two to a line so nothing crowds: when and where on
+    /// the horizon to look, then when the light turns golden and the day's
+    /// span.
     private func statRow(_ event: SunEvent) -> some View {
         let azimuth = SunPosition.azimuth(date: event.date,
                                           latitude: bundle.place.latitude,
                                           longitude: bundle.place.longitude)
-        let golden: Date? = event.kind == .sunset
-            ? GoldenHour.evening(sunset: event.date)?.lowerBound
-            : event.date
-        return HStack(spacing: 0) {
-            stat(event.kind == .sunset ? "Sets" : "Rises",
-                 Fmt.time(event.date, timezone: timezone))
-            statDivider
-            stat("Look", Fmt.windDirectionLabel(azimuth))
-            if let golden {
+        let goldenValue: String = event.kind == .sunset
+            ? "from \(Fmt.time(event.date.addingTimeInterval(-3600), timezone: timezone))"
+            : "until \(Fmt.time(event.date.addingTimeInterval(3600), timezone: timezone))"
+        return VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                stat(event.kind == .sunset ? "Sets" : "Rises",
+                     Fmt.time(event.date, timezone: timezone))
                 statDivider
-                stat("Golden light", event.kind == .sunset
-                        ? "from \(Fmt.time(golden, timezone: timezone))"
-                        : "til \(Fmt.time(golden.addingTimeInterval(3600), timezone: timezone))")
+                stat("Look", Fmt.windDirectionLabel(azimuth))
             }
-            if let daylight = daylightSpan(event) {
+            .padding(.vertical, 13)
+            hairline.opacity(0.7)
+            HStack(spacing: 0) {
+                stat("Golden hour", goldenValue)
                 statDivider
-                stat("Daylight", daylight)
+                stat("Daylight", daylightSpan(event) ?? "—")
             }
+            .padding(.vertical, 13)
         }
-        .padding(.vertical, 14)
         .overlay(alignment: .top) { hairline }
         .overlay(alignment: .bottom) { hairline }
     }
 
     private func stat(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 4) {
             Text(label)
-                .font(.serif(.caption2))
+                .font(.serif(.caption))
                 .foregroundStyle(.white.opacity(0.65))
             Text(value)
-                .font(.serif(.subheadline, weight: .semibold))
+                .font(.serif(.headline))
                 .foregroundStyle(.white.opacity(0.95))
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -196,7 +195,7 @@ struct SunEventsView: View {
     private var statDivider: some View {
         Rectangle()
             .fill(.white.opacity(0.22))
-            .frame(width: 0.6, height: 26)
+            .frame(width: 0.6, height: 30)
     }
 
     private var hairline: some View {
@@ -264,7 +263,7 @@ struct SunEventsView: View {
     }
 
     private var unratedNote: some View {
-        Text("The cloud layers needed to rate this one haven't arrived yet — pull down on the main screen to refresh the forecast.")
+        Text("The cloud layers needed to rate this one haven't arrived yet. Pull down on the main screen to refresh the forecast.")
             .font(.serif(.subheadline, italic: true))
             .foregroundStyle(.white.opacity(0.75))
             .frame(maxWidth: .infinity, alignment: .leading)

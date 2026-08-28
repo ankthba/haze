@@ -130,7 +130,7 @@ enum DailyBrief {
         guard let dew = bundle.current.dewPoint else { return nil }
         let threshold: Double = usesFahrenheit ? 67 : 19.5
         guard dew >= threshold else { return nil }
-        return "Muggy out — dew point near \(Fmt.tempDegree(dew))."
+        return "Muggy out, dew point near \(Fmt.tempDegree(dew))."
     }
 
     /// Friday's look ahead: "Saturday is the better half of the weekend."
@@ -150,7 +150,7 @@ enum DailyBrief {
         let rainGap = saturday.precipitationProbabilityMax - sunday.precipitationProbabilityMax
         if abs(rainGap) >= 25 {
             let (nicer, wetter) = rainGap < 0 ? (saturday, sunday) : (sunday, saturday)
-            return "\(Fmt.fullWeekday(nicer.date, timezone: timezone)) is the better half of the weekend — \(Fmt.percent(wetter.precipitationProbabilityMax)) rain odds \(wetter.date == saturday.date ? "Saturday" : "Sunday")."
+            return "\(Fmt.fullWeekday(nicer.date, timezone: timezone)) is the better half of the weekend, with \(Fmt.percent(wetter.precipitationProbabilityMax)) rain odds \(wetter.date == saturday.date ? "Saturday" : "Sunday")."
         }
         if max(saturday.precipitationProbabilityMax, sunday.precipitationProbabilityMax) < 30 {
             return "The weekend looks dry on both sides."
@@ -212,7 +212,7 @@ enum DailyBrief {
         case .fog:              base = "Low fog for now"
         case .drizzle:          base = "A fine drizzle"
         case .rain, .showers:   base = "Rain over the city"
-        case .freezingRain:     base = "Freezing rain — take care"
+        case .freezingRain:     base = "Freezing rain, take care"
         case .snow, .snowGrains, .snowShowers: base = "Snow falling"
         case .thunderstorm, .thunderstormHail: base = "Thunderstorms nearby"
         case .unknown:          base = "A quiet sky"

@@ -102,29 +102,31 @@ struct BottomStatusBar: View {
 
     // MARK: - Home: what the sky does next
 
+    /// At home the whole bar is the door to the sun quality page, the same way
+    /// the whole bar is the way home when browsing elsewhere.
     private var homeContent: some View {
-        HStack(spacing: 14) {
-            circleBadge(active: false)
+        Button {
+            Haptics.tap()
+            onSunTap?()
+        } label: {
+            HStack(spacing: 14) {
+                circleBadge(active: false)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Your location")
-                    .font(.serif(.subheadline, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Text(bundle.place.subtitle.isEmpty ? bundle.place.name : bundle.place.subtitle)
-                    .font(.serif(.caption2, italic: true))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(1)
-            }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Your location")
+                        .font(.serif(.subheadline, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(bundle.place.subtitle.isEmpty ? bundle.place.name : bundle.place.subtitle)
+                        .font(.serif(.caption2, italic: true))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            if let sun = nextSunEvent {
-                Button {
-                    Haptics.tap()
-                    onSunTap?()
-                } label: {
-                    HStack(spacing: 7) {
+                if let sun = nextSunEvent {
+                    HStack(spacing: 8) {
                         Image(systemName: sun.symbol)
                             .symbolRenderingMode(.multicolor)
                             .font(.system(size: 18))
@@ -132,35 +134,55 @@ struct BottomStatusBar: View {
                             Text(sun.time)
                                 .font(.serif(.subheadline, weight: .semibold))
                                 .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize()
                             // The one-word verdict rides along, in its tier's
-                            // color — the page behind the tap, in miniature.
-                            if let tier = sun.tier {
+                            // color: the page behind the tap, in miniature.
+                            if let tier = sun.rating?.tier {
                                 (Text("\(sun.label) · ")
                                     .foregroundStyle(.white.opacity(0.7))
                                  + Text(tier.rawValue)
                                     .foregroundStyle(tier.accent))
                                     .font(.serif(.caption2))
+                                    .lineLimit(1)
+                                    .fixedSize()
                             } else {
                                 Text(sun.label)
                                     .font(.serif(.caption2))
                                     .foregroundStyle(.white.opacity(0.7))
+                                    .lineLimit(1)
                             }
                         }
+                        if let rating = sun.rating {
+                            Text("\(rating.score)")
+                                .font(.serif(.title3))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize()
+                                .padding(.leading, 3)
+                        }
                     }
-                    // A little slack around the readout keeps the tap target
-                    // honest without changing the bar's layout.
-                    .contentShape(Rectangle())
+                    // The readout is the point of the bar; the place name
+                    // yields to it rather than the other way round.
+                    .layoutPriority(1)
                 }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(sun.tier.map {
-                    "\(sun.label) at \(sun.time), rated \($0.rawValue)"
-                } ?? "\(sun.label) at \(sun.time)")
-                .accessibilityHint("Shows sunrise and sunset quality ratings")
             }
+            .padding(.leading, 12)
+            .padding(.trailing, 20)
+            .contentShape(shape)
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 20)
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(homeAccessibilityLabel)
+        .accessibilityHint("Shows sunrise and sunset quality ratings")
+    }
+
+    private var homeAccessibilityLabel: String {
+        guard let sun = nextSunEvent else { return "Your location" }
+        if let rating = sun.rating {
+            return "\(sun.label) at \(sun.time), rated \(rating.score) out of 100, \(rating.tier.rawValue)"
+        }
+        return "\(sun.label) at \(sun.time)"
     }
 
     private func circleBadge(active: Bool) -> some View {
@@ -175,9 +197,9 @@ struct BottomStatusBar: View {
 
     /// Sunset while the sun is still up, sunrise once it's down — whichever is
     /// genuinely next, including tomorrow's sunrise late at night. Carries the
-    /// event's quality tier when the forecast can support one.
+    /// event's quality rating when the forecast can support one.
     private var nextSunEvent: (symbol: String, label: String, time: String,
-                               tier: SunQuality.Tier?)? {
+                               rating: SunQuality.Rating?)? {
         let now = Date()
         let tz = bundle.timezone
         let upcoming: [(Date, SunEvent.Kind)] = bundle.daily.prefix(2).flatMap { day -> [(Date, SunEvent.Kind)] in
@@ -190,7 +212,7 @@ struct BottomStatusBar: View {
             .filter({ $0.0 > now })
             .min(by: { $0.0 < $1.0 })
         else { return nil }
-        let tier = SunQuality.rate(kind: next.1, at: next.0, in: bundle)?.tier
-        return (next.1.symbolName, next.1.rawValue, Fmt.time(next.0, timezone: tz), tier)
+        let rating = SunQuality.rate(kind: next.1, at: next.0, in: bundle)
+        return (next.1.symbolName, next.1.rawValue, Fmt.time(next.0, timezone: tz), rating)
     }
 }

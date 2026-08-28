@@ -92,10 +92,10 @@ nonisolated enum SunQuality {
         var blurb: String {
             switch self {
             case .poor:        return "Cloud or rain will likely smother the color."
-            case .fair:        return "A quiet sky — soft light, little drama."
+            case .fair:        return "A quiet sky, soft light, little drama."
             case .good:        return "Some color is likely along the horizon."
             case .great:       return "Clouds are set up to catch real color."
-            case .spectacular: return "A painted sky is on the cards — go look."
+            case .spectacular: return "A painted sky is on the cards. Go look."
             }
         }
     }
@@ -218,20 +218,20 @@ nonisolated enum SunQuality {
         switch rating.tier {
         case .spectacular:
             verdict = sunset
-                ? "The sky is set up for something special this evening — a broken deck of high cloud should catch fire as the sun slips under."
-                : "The sky is set up for something special — a broken deck of high cloud should catch first light and burn."
+                ? "The sky is set up for something special this evening, with a broken deck of high cloud ready to catch fire as the sun slips under."
+                : "The sky is set up for something special, with a broken deck of high cloud ready to catch first light and burn."
         case .great:
             verdict = sunset
                 ? "The clouds are arranged kindly tonight; expect real color climbing off the horizon."
                 : "The clouds are arranged kindly for the morning; expect real color before the sun clears the horizon."
         case .good:
             verdict = deck < 15
-                ? "A clean, quiet sky — expect a soft amber glow rather than fireworks."
-                : "Some color is likely — patches of high cloud should warm as the light comes in low."
+                ? "A clean, quiet sky. Expect a soft amber glow rather than fireworks."
+                : "Some color is likely, with patches of high cloud warming as the light comes in low."
         case .fair:
             verdict = rating.cloudLow >= 45
                 ? "Low cloud sits along the horizon, so most of the show will happen behind it."
-                : "A muted sky — the light has little up there to work with."
+                : "A muted sky, with little up there for the light to work with."
         case .poor:
             if rating.rainRisk >= 50 {
                 verdict = sunset
@@ -239,8 +239,8 @@ nonisolated enum SunQuality {
                     : "Rain is likely around sunrise; the day will arrive quietly."
             } else {
                 verdict = sunset
-                    ? "An overcast lid tonight — the sun will slip away unseen."
-                    : "An overcast lid this morning — the sun will arrive unseen."
+                    ? "An overcast lid tonight; the sun will slip away unseen."
+                    : "An overcast lid this morning; the sun will arrive unseen."
             }
         }
 
@@ -248,8 +248,8 @@ nonisolated enum SunQuality {
         switch rating.tier {
         case .great, .spectacular:
             timing = sunset
-                ? "The best of it usually lands ten to twenty minutes after \(time) — stay a while."
-                : "Worth the early alarm — the color peaks in the minutes before \(time)."
+                ? "The best of it usually lands ten to twenty minutes after \(time), so stay a while."
+                : "Worth the early alarm. The color peaks in the minutes before \(time)."
         case .good:
             timing = sunset
                 ? "Golden hour runs the hour before \(time)."
