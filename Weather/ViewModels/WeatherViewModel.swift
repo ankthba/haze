@@ -330,7 +330,38 @@ final class WeatherViewModel {
                 }
             } else {
                 NotificationPlanner.cancelSunAlert(kind: .sunrise)
+                // The night-before heads-up hangs off this switch, so it goes too.
+                NotificationPlanner.cancelSunriseEvening()
             }
+        }
+    }
+
+    /// The night-before heads-up for a promising sunrise, so the alarm can
+    /// actually be set. Rides on the sunrise alert's own quality bar.
+    var sunriseEveningEnabled: Bool {
+        didSet {
+            guard oldValue != sunriseEveningEnabled else { return }
+            NotificationPlanner.sunriseEveningEnabled = sunriseEveningEnabled
+            if sunriseEveningEnabled {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if await RainAlertsService.requestPermission() { replanNotifications() }
+                    else { sunriseEveningEnabled = false }
+                }
+            } else {
+                NotificationPlanner.cancelSunriseEvening()
+            }
+        }
+    }
+
+    /// When that heads-up arrives; only the hour and minute matter.
+    var sunriseEveningTime: Date {
+        didSet {
+            let cal = Calendar.current
+            NotificationPlanner.sunriseEveningMinutes =
+                cal.component(.hour, from: sunriseEveningTime) * 60
+                + cal.component(.minute, from: sunriseEveningTime)
+            replanNotifications()
         }
     }
 
@@ -449,6 +480,11 @@ final class WeatherViewModel {
         sunriseAlertLeadMinutes = NotificationPlanner.sunriseAlertLeadMinutes
         sunsetAlertGate = NotificationPlanner.sunsetAlertGate
         sunriseAlertGate = NotificationPlanner.sunriseAlertGate
+        sunriseEveningEnabled = NotificationPlanner.sunriseEveningEnabled
+        sunriseEveningTime = Calendar.current.date(
+            bySettingHour: NotificationPlanner.sunriseEveningMinutes / 60,
+            minute: NotificationPlanner.sunriseEveningMinutes % 60,
+            second: 0, of: Date()) ?? Date()
         digestTime = Calendar.current.date(
             bySettingHour: NotificationPlanner.digestMinutes / 60,
             minute: NotificationPlanner.digestMinutes % 60,

@@ -54,8 +54,12 @@ enum NotificationPlanner {
     private static let sunsetGateKey = "sunset_alert_gate"
     private static let sunriseGateKey = "sunrise_alert_gate"
 
+    private static let sunriseEveningEnabledKey = "sunrise_evening_enabled"
+    private static let sunriseEveningMinutesKey = "sunrise_evening_minutes_from_midnight"
+
     private static let sunsetID = "sunset-alert"
     private static let sunriseID = "sunrise-alert"
+    private static let sunriseEveningID = "sunrise-evening"
 
     /// Both alerts default on with quality gates chosen so they only speak
     /// when the sky is worth it, the setting most people would pick.
@@ -100,6 +104,24 @@ enum NotificationPlanner {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: sunriseGateKey) }
     }
 
+    /// The night-before heads-up. A sunrise alert forty-five minutes ahead of
+    /// the event is useless if you are asleep; this one lands while you still
+    /// have the phone in your hand and can set an alarm. Off by default, and
+    /// it rides on the sunrise alert's own quality bar.
+    static var sunriseEveningEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: sunriseEveningEnabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: sunriseEveningEnabledKey) }
+    }
+
+    /// Minutes from local midnight; default 9 PM.
+    static var sunriseEveningMinutes: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: sunriseEveningMinutesKey)
+            return stored > 0 ? stored : 21 * 60
+        }
+        set { UserDefaults.standard.set(newValue, forKey: sunriseEveningMinutesKey) }
+    }
+
     /// Reconcile every scheduled notification with the newest forecast. Called
     /// after every successful device-place load and from the background check.
     static func refresh(bundle: WeatherBundle, usesFahrenheit: Bool) {
@@ -107,6 +129,7 @@ enum NotificationPlanner {
         refreshGoldenHour(bundle: bundle)
         refreshSunAlert(kind: .sunset, bundle: bundle)
         refreshSunAlert(kind: .sunrise, bundle: bundle)
+        refreshSunriseEvening(bundle: bundle)
     }
 
     static func cancelDigest() {
@@ -123,6 +146,11 @@ enum NotificationPlanner {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(
                 withIdentifiers: [kind == .sunset ? sunsetID : sunriseID])
+    }
+
+    static func cancelSunriseEvening() {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: [sunriseEveningID])
     }
 
     // MARK: - Morning digest
@@ -231,6 +259,54 @@ enum NotificationPlanner {
         }
         // Nothing qualifies in the window; make sure no stale alert lingers.
         cancelSunAlert(kind: kind)
+    }
+
+    // MARK: - The night before
+
+    /// Tonight's heads-up about tomorrow morning. Describes the first sunrise
+    /// after the heads-up itself fires, so the copy is never about a sunrise
+    /// that has already happened, and only when that sunrise clears the same
+    /// bar the morning alert uses. One pending request, replaced on every
+    /// refresh, so a deck of cloud rolling in overnight silences it.
+    private static func refreshSunriseEvening(bundle: WeatherBundle) {
+        guard sunriseAlertEnabled, sunriseEveningEnabled else {
+            cancelSunriseEvening()
+            return
+        }
+
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = bundle.timezone
+        let now = Date()
+        let tonight = cal.startOfDay(for: now)
+            .addingTimeInterval(TimeInterval(sunriseEveningMinutes * 60))
+        let fireDate = tonight > now ? tonight : tonight.addingTimeInterval(86_400)
+
+        guard let sunrise = bundle.daily.prefix(3).compactMap(\.sunrise)
+                .sorted().first(where: { $0 > fireDate }),
+              let rating = SunQuality.rate(kind: .sunrise, at: sunrise, in: bundle),
+              rating.score >= sunriseAlertGate.minScore
+        else {
+            cancelSunriseEvening()
+            return
+        }
+
+        let voice = Voice.current
+        let at = Fmt.time(sunrise, timezone: bundle.timezone)
+        let tier = rating.tier.rawValue.lowercased()
+        let content = UNMutableNotificationContent()
+        content.title = voice.pick("Tomorrow's sunrise at \(at)",
+                                   whimsy: "Set an alarm for tomorrow's sunrise")
+        content.body = voice.pick(
+            "Rates \(rating.score), \(tier). \(rating.tier.blurb(voice)) Worth setting an alarm.",
+            whimsy: "\(rating.score) out of 100, which is \(tier). \(rating.tier.blurb(voice)) It's up at \(at).")
+        content.sound = .default
+
+        let components = cal.dateComponents([.year, .month, .day, .hour, .minute],
+                                            from: fireDate)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: sunriseEveningID, content: content,
+                                  trigger: UNCalendarNotificationTrigger(
+                                      dateMatching: components, repeats: false)))
     }
 
     // MARK: - Golden hour

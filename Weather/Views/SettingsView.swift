@@ -415,9 +415,28 @@ struct SettingsView: View {
                 if viewModel.sunriseAlertEnabled {
                     sunAlertOptions(lead: $viewModel.sunriseAlertLeadMinutes,
                                     gate: $viewModel.sunriseAlertGate)
+
+                    // A heads-up forty-five minutes before sunrise is no use
+                    // if you are asleep; this one arrives while there is still
+                    // time to set an alarm.
+                    settingToggle("Tell me the evening before",
+                                  isOn: $viewModel.sunriseEveningEnabled)
+                    if viewModel.sunriseEveningEnabled {
+                        HStack {
+                            Text("Arrives at")
+                                .font(.serif(.subheadline, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                            Spacer()
+                            DatePicker("Evening heads-up time",
+                                       selection: $viewModel.sunriseEveningTime,
+                                       displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                                .colorScheme(.dark)
+                        }
+                    }
                 }
 
-                Text("Sun alerts arrive ahead of the event, and only when its rating clears the bar you set. Great skies are rare; that's what makes the alert worth having.")
+                Text("Sun alerts arrive ahead of the event, and only when its rating clears the bar you set. Great skies are rare; that's what makes the alert worth having. The evening heads-up describes the next morning, so there is still time to set an alarm.")
                     .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)

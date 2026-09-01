@@ -193,15 +193,24 @@ nonisolated enum SunQuality {
         // when there is nothing overhead to light up.
 
         // Canvas: high cloud lights up best, mid cloud counts for half.
-        //   The sweet spot is a broken deck (~30–60%); clear is pleasant but
+        //   The sweet spot is a broken deck (~30-60%); clear is pleasant but
         //   plain, and a solid sheet goes gray.
+        //
+        //   The descent used to fall 100 to 40 across deck 60-80, which put a
+        //   cliff right where forecasts are noisiest: high and mid cloud move
+        //   together between model runs, so a routine 15-point nudge in each
+        //   crossed the whole cliff and the score collapsed. An 78% deck is
+        //   still a good canvas in reality; only a closed lid kills it, and
+        //   the low-cloud term below is what handles a blocked horizon.
         let deck = min(high + mid * 0.5, 100)
-        let canvas = ramp(deck, points: [(0, 45), (15, 70), (30, 100), (60, 100),
-                                         (80, 40), (100, 22)])
+        let canvas = ramp(deck, points: [(0, 45), (15, 72), (30, 95), (55, 100),
+                                         (75, 85), (90, 55), (100, 35)])
 
         // Horizon: low cloud stands between you and the light. A few
         //   fair-weather clouds are harmless; a closed deck ends the show.
-        let horizon = ramp(low, points: [(0, 100), (15, 100), (40, 55), (70, 18), (100, 8)])
+        //   Eased for the same reason as the canvas: scattered low cloud
+        //   should cost a little, not half the score.
+        let horizon = ramp(low, points: [(0, 100), (20, 97), (45, 72), (70, 38), (100, 12)])
 
         // Clarity: how clean the light's path is. Visibility where the model
         //   provides it, humidity as the haze proxy otherwise; heavy humidity
@@ -213,7 +222,12 @@ nonisolated enum SunQuality {
         } else {
             clarity = ramp(humidity, points: [(30, 100), (60, 88), (85, 62), (100, 45)])
         }
-        if humidity > 85 { clarity = min(clarity, 62) }
+        // Heavy humidity mutes the palette even when horizontal visibility
+        // reads fine. Blend the cap in rather than stepping to it: as a hard
+        // `if humidity > 85 { min(clarity, 62) }` this knocked thirty points
+        // off the instant the forecast crossed 85%, and a muggy evening
+        // hovering either side of that line flickered between tiers.
+        clarity = min(clarity, ramp(humidity, points: [(80, 100), (90, 62), (100, 50)]))
 
         // Rain: a steepening drag, then a hard veto below.
         let rain = 100 - precipProb * 0.7
