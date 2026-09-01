@@ -2,8 +2,9 @@
 //  SettingsView.swift
 //  Weather
 //
-//  Preferences: appearance (text size), units, time format, home-screen cards,
-//  radar behavior, haptics, and data provenance.
+//  Preferences: appearance (text size), units, time format, the voice the
+//  forecast is written in, home-screen cards, radar behavior, haptics, and
+//  data provenance.
 //
 
 import SwiftUI
@@ -39,6 +40,7 @@ struct SettingsView: View {
                         textSizeCard
                         appIconCard
                         accessibilityCard
+                        voiceCard
                         notificationsCard
                             .id("notifications")
                         unitsCard
@@ -231,7 +233,7 @@ struct SettingsView: View {
     }
 
     /// When the device-wide accessibility setting is on, the row shows as on
-    /// and locks — the in-app toggle is an override for turning a behavior on,
+    /// and locks: the in-app toggle is an override for turning a behavior on,
     /// never a way to fight the system setting off.
     private func accessibilityToggle(_ label: String,
                                      isOn: Binding<Bool>,
@@ -274,6 +276,47 @@ struct SettingsView: View {
                 Text("Bold text weights up all type; contrast deepens the sky behind it; transparency solidifies the frosted surfaces; motion stills the radar and pulsing icons. Device-wide accessibility settings apply automatically.")
                     .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// The register every composed sentence in the app is written in. The
+    /// specimens underneath are the real thing, set the way the brief and a
+    /// notification would set them, so the choice is made by reading rather
+    /// than by guessing what "whimsy" means.
+    private var voiceCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                CardLabel(systemImage: "sparkles", title: "Voice")
+
+                settingToggle("Whimsy mode", isOn: $viewModel.whimsyEnabled)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(viewModel.voice.specimen)
+                        .font(.serif(.callout, italic: true))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .contentTransition(.opacity)
+                    Text(viewModel.voice.notificationSpecimen)
+                        .font(.serif(.caption, italic: true))
+                        .foregroundStyle(.white.opacity(0.62))
+                        .contentTransition(.opacity)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(.white.opacity(0.25))
+                        .frame(width: 0.6)
+                }
+                .animation(.easeInOut(duration: 0.3), value: viewModel.whimsyEnabled)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Sample, \(viewModel.voice.specimen) \(viewModel.voice.notificationSpecimen)")
+
+                Text("Whimsy mode rewrites the daily brief, the rain timing line, the sunrise and sunset verdicts, and every notification with a bit more charm in it. The forecast itself never changes, and severe-weather advisories always read plainly.")
+                    .font(.serif(.caption))
+                    .foregroundStyle(.white.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

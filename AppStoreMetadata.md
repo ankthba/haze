@@ -1,4 +1,4 @@
-# Haze — App Store Connect metadata
+# Haze: App Store Connect metadata
 
 Paste these into App Store Connect → your app → the **2.0** version page.
 
@@ -9,7 +9,7 @@ Haze
 Beautiful, Accurate Weather
 
 ## Promotional Text (max 170, editable anytime, no review)
-A calm, editorial weather app — big serif numerals, soft skies that shift with the day, and accurate forecasts. No ads. No accounts.
+A calm, editorial weather app with big serif numerals, soft skies that shift with the day, and accurate forecasts. No ads. No accounts.
 
 ## Keywords (max 100, comma-separated, NO spaces after commas)
 forecast,hourly,daily,minimal,widget,sunrise,sunset,uv,humidity,wind,pressure,air,quality,radar,rain
@@ -56,9 +56,9 @@ Notifications. Rain starting soon, severe weather advisories, a morning brief, a
 And more. A daily brief in the app's editorial voice, a refined welcome, iCloud sync for places and settings, richer detail sheets, a rebuilt settings screen, and dozens of refinements throughout.
 
 ## What's New (release notes for 1.0, shipped)
-Welcome to Haze — a calm, beautiful weather app. This is our first release. Thank you for trying it.
+Welcome to Haze, a calm, beautiful weather app. This is our first release. Thank you for trying it.
 
-## Support URL (REQUIRED — you must supply a reachable URL with a contact method)
+## Support URL (REQUIRED: you must supply a reachable URL with a contact method)
 e.g. a simple page, or a GitHub repo/Gist.
 
 ## Category
@@ -77,18 +77,18 @@ Primary: Weather   |   Secondary (optional): Utilities
 Free
 
 ## Export Compliance
-Already handled in the binary (ITSAppUsesNonExemptEncryption = NO) — no prompt.
+Already handled in the binary (ITSAppUsesNonExemptEncryption = NO), so no prompt.
 
 ## App Review Notes (Additional information for the reviewer)
-No account, login, or in-app purchase is required — the app is fully functional on first launch.
+No account, login, or in-app purchase is required. The app is fully functional on first launch.
 
 LOCATION: Haze uses location access (when-in-use) only to show the local forecast. If you prefer not to grant location permission, you can still test everything: tap the search icon and enter any city (e.g. "San Francisco") to load its full forecast.
 
-DATA: Weather comes from Open-Meteo (https://open-meteo.com), a free open weather API. No API key, backend, or special configuration is needed — just a normal internet connection.
+DATA: Weather comes from Open-Meteo (https://open-meteo.com), a free open weather API. No API key, backend, or special configuration is needed, just a normal internet connection.
 
 A Home Screen widget (small and medium) is included. The app supports iPhone on iOS 18+. There are no ads and no third-party tracking.
 
-## Screenshots (REQUIRED — you capture these)
+## Screenshots (REQUIRED: you capture these)
 Need 6.9" iPhone (1320x2868) and 6.5" iPhone (1242x2688).
 Good set: main screen on a clear day, the 72h trend mid-scrub, the 10-day list,
 a day-detail sheet, the sun arc, and the widget on a home screen.

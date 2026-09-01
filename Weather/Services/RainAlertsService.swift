@@ -7,7 +7,7 @@
 //  place and posts a local notification when rain is about to start or a new
 //  advisory lands. Each rain window and each alert id notifies once.
 //
-//  iOS decides when (and whether) background refreshes actually run — this is
+//  iOS decides when (and whether) background refreshes actually run: this is
 //  best-effort by platform design, not a guaranteed schedule.
 //
 
@@ -77,7 +77,7 @@ enum RainAlertsService {
         guard isEnabled,
               let place = LocationManager.rememberedDevicePlace() else { return }
 
-        // Exactly two requests: the minimal nowcast and the alerts feed — not
+        // Exactly two requests: the minimal nowcast and the alerts feed, not
         // the full extras fetch, whose AQI + station chain would be discarded.
         async let minutely = fetchMinutely(place: place)
         async let alerts = WeatherService().fetchAlerts(place: place)
@@ -119,9 +119,13 @@ enum RainAlertsService {
         UserDefaults.standard.set(start.timeIntervalSince1970, forKey: notifiedRainKey)
 
         let timezone = place.timezone.flatMap(TimeZone.init(identifier:)) ?? .current
+        let voice = Voice.current
+        let at = Fmt.time(start, timezone: timezone)
         let content = UNMutableNotificationContent()
-        content.title = "Rain on the way"
-        content.body = "Starting around \(Fmt.time(start, timezone: timezone)) near \(place.name)."
+        content.title = voice.pick("Rain on the way", whimsy: "Rain's about to turn up")
+        content.body = voice.pick(
+            "Starting around \(at) near \(place.name).",
+            whimsy: "It arrives around \(at) near \(place.name), so take an umbrella.")
         content.sound = .default
         try? await UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "rain-\(Int(start.timeIntervalSince1970))",
@@ -143,7 +147,7 @@ enum RainAlertsService {
         // Prune to what's still in force: expired ids fall out naturally,
         // active ones stay deduped, and the set is bounded by the number of
         // concurrent alerts. (A hard cap-and-wipe re-notified everything mid-
-        // storm — exactly when duplicates are most annoying.)
+        // storm, exactly when duplicates are most annoying.)
         notified.formIntersection(alerts.map(\.id))
 
         guard let fresh = alerts.first(where: { !notified.contains($0.id) && $0.isUrgent })
@@ -154,10 +158,12 @@ enum RainAlertsService {
         notified.insert(fresh.id)
         UserDefaults.standard.set(Array(notified), forKey: notifiedAlertsKey)
 
+        // Advisories are the one place the whimsical voice never reaches: a
+        // severe-weather headline is not the place for a softer register.
         let content = UNMutableNotificationContent()
         content.title = fresh.event
-        content.body = fresh.headline ?? "Active advisory for \(place.name) — open Haze for details."
-        // Critical sound needs an Apple-approved entitlement we don't have —
+        content.body = fresh.headline ?? "Active advisory for \(place.name). Open Haze for details."
+        // Critical sound needs an Apple-approved entitlement we don't have, so
         // it would be silently downgraded. Time-sensitive is the honest tier.
         content.sound = .default
         if fresh.isUrgent { content.interruptionLevel = .timeSensitive }

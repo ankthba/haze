@@ -200,7 +200,7 @@ struct DailyBriefTests {
         #expect(!dry.lowercased().contains("muggy"))
     }
 
-    @Test("The brief stays short — three sentences at most")
+    @Test("The brief stays short, three sentences at most")
     func restraint() {
         var uv = Array(repeating: 0.0, count: 24)
         for hour in 11...15 { uv[hour] = 10 }

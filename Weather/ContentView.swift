@@ -20,7 +20,7 @@ struct ContentView: View {
 
     @Environment(\.scenePhase) private var scenePhase
 
-    /// Screen metrics, refreshed on rotation — reading the window hierarchy
+    /// Screen metrics, refreshed on rotation. Reading the window hierarchy
     /// inside a body is both wasteful and stale after the device turns.
     private var metrics: ScreenMetrics { .shared }
 
@@ -83,7 +83,7 @@ struct ContentView: View {
         // The whole app (sheets included) follows the in-app text-size setting;
         // custom serif fonts scale because they're all `relativeTo:` a text
         // style. On "Auto" the environment passes through untouched, so the
-        // system setting — including accessibility sizes — applies as-is.
+        // system setting, accessibility sizes included, applies as-is.
         .transformEnvironment(\.dynamicTypeSize) { size in
             if let override = viewModel.textSize.dynamicTypeSize { size = override }
         }
@@ -121,7 +121,7 @@ struct ContentView: View {
         // device location this re-resolves the location itself, so arriving in
         // a new city never leaves yesterday's city on screen.
         // "Open the radar" via Siri/Shortcuts leaves a note that's consumed
-        // only once a bundle exists — on a cold start the intent's perform()
+        // only once a bundle exists: on a cold start the intent's perform()
         // can run *after* the scene goes active, and presenting the radar
         // cover with no bundle would show an undismissable blank screen. The
         // bundle-arrival hook below catches both orderings.
@@ -138,7 +138,7 @@ struct ContentView: View {
                 RainAlertsService.scheduleNextCheck()
             }
         }
-        // And on a timer while it stays open (silent — no spinner).
+        // And on a timer while it stays open (silent, no spinner).
         // Silent periodic refresh at the user-chosen interval; the task restarts
         // whenever the interval setting changes.
         .task(id: viewModel.refreshMinutes) {
@@ -157,7 +157,7 @@ struct ContentView: View {
         .sheet(isPresented: $showSunEvents) {
             if let bundle = viewModel.bundle {
                 SunEventsView(bundle: bundle, unit: viewModel.temperatureUnit,
-                              initialKind: sunEventsKind)
+                              initialKind: sunEventsKind, voice: viewModel.voice)
             }
         }
         .fullScreenCover(isPresented: $showRadar) {
@@ -185,7 +185,7 @@ private struct LoadingView: View {
 
     var body: some View {
         ZStack {
-            // The app's own day sky, softened toward the horizon — the loading
+            // The app's own day sky, softened toward the horizon. The loading
             // screen should feel like the first page of the magazine, not a
             // separate app.
             LinearGradient(
@@ -250,7 +250,7 @@ private struct ErrorView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
 
-                // The failure state keeps the app's serif voice — this is the
+                // The failure state keeps the app's serif voice, because this is the
                 // one screen a user sees when things break.
                 HStack(spacing: 12) {
                     Button(action: onRetry) {

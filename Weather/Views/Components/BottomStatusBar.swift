@@ -177,7 +177,7 @@ struct BottomStatusBar: View {
         .accessibilityHint("Shows sunrise and sunset quality ratings")
     }
 
-    /// "Tonight", "This morning", or "Tomorrow" — the word before "at 7:44".
+    /// "Tonight", "This morning", or "Tomorrow": the word before "at 7:44".
     private func whenWord(for event: (kind: SunEvent.Kind, date: Date,
                                       rating: SunQuality.Rating?)) -> String {
         var cal = Calendar(identifier: .gregorian)

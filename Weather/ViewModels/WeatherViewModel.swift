@@ -39,6 +39,7 @@ final class WeatherViewModel {
     private static let refreshMinutesKey = "refresh_minutes"
     private static let deviceLocationKey = "use_device_location"
     private static let onboardedKey = "has_onboarded"
+    private static let whimsyKey = Voice.defaultsKey
 
     /// The reorderable blocks of the main screen, in their user-chosen order.
     /// (The hero conditions header always stays on top.)
@@ -67,8 +68,8 @@ final class WeatherViewModel {
 
     /// App-wide type scale, applied as a Dynamic Type size at the root so every
     /// serif font (they're all `relativeTo:` a text style) follows along.
-    /// `.system` (the default) passes the device's own setting through — which
-    /// is what makes the accessibility sizes AX1–AX5 reachable; a forced size
+    /// `.system` (the default) passes the device's own setting through, which
+    /// is what makes the accessibility sizes AX1 to AX5 reachable; a forced size
     /// at the root would cap every low-vision user at .xxLarge.
     enum TextSize: String, CaseIterable, Identifiable {
         case system, small, standard, large, extraLarge
@@ -122,10 +123,11 @@ final class WeatherViewModel {
         nowcast = RainNowcast.compute(minutely: bundle.minutely,
                                       wetThreshold: usesInches ? 0.005 : 0.12)
         // The nowcast line under the hero already gives exact rain timing, so
-        // the brief skips it — two copies stacked read as a glitch.
+        // the brief skips it; two copies stacked read as a glitch.
         briefText = DailyBrief.compose(bundle: bundle,
                                        nowcast: showDailyBrief && nowcast != nil ? nil : nowcast,
-                                       usesFahrenheit: temperatureUnit == .fahrenheit)
+                                       usesFahrenheit: temperatureUnit == .fahrenheit,
+                                       voice: voice)
         let todays = bundle.upcomingHours.filter {
             Fmt.isToday($0.date, timezone: bundle.timezone)
         }
@@ -281,7 +283,7 @@ final class WeatherViewModel {
         }
     }
 
-    /// "Golden hour soon" — twenty minutes before the light turns.
+    /// "Golden hour soon", twenty minutes before the light turns.
     var goldenHourEnabled: Bool {
         didSet {
             guard oldValue != goldenHourEnabled else { return }
@@ -380,6 +382,24 @@ final class WeatherViewModel {
         didSet { UserDefaults.standard.set(showDailyBrief, forKey: Self.showBriefKey); CloudSync.push() }
     }
 
+    /// Whimsy mode: the same forecast, told with a lighter step. Every
+    /// composed sentence in the app is written in both registers, so this
+    /// only changes wording. Flipping it recomposes the brief in place and
+    /// rebuilds the scheduled notifications so the queued digest doesn't
+    /// arrive tomorrow morning still speaking in the old voice.
+    var whimsyEnabled: Bool {
+        didSet {
+            guard oldValue != whimsyEnabled else { return }
+            UserDefaults.standard.set(whimsyEnabled, forKey: Self.whimsyKey)
+            CloudSync.push()
+            refreshDerived()
+            replanNotifications()
+        }
+    }
+
+    /// The register every composed sentence is written in.
+    var voice: Voice { whimsyEnabled ? .whimsical : .editorial }
+
     var showRadarPreview: Bool {
         didSet { UserDefaults.standard.set(showRadarPreview, forKey: Self.showRadarPreviewKey); CloudSync.push() }
     }
@@ -448,6 +468,7 @@ final class WeatherViewModel {
         }()
         useDeviceLocation = defaults.object(forKey: Self.deviceLocationKey) as? Bool ?? true
         hasOnboarded = defaults.bool(forKey: Self.onboardedKey)
+        whimsyEnabled = defaults.bool(forKey: Self.whimsyKey)
         // Stored order, tolerant of future cards: unknown names are dropped and
         // any cards missing from the stored list are appended in default order.
         let stored = (defaults.stringArray(forKey: Self.cardOrderKey) ?? [])
@@ -464,7 +485,7 @@ final class WeatherViewModel {
 
     /// Decide what to show on first launch: device location, else last/first saved place.
     func bootstrap() async {
-        // Draw last session's reading straight away — the location fix and the
+        // Draw last session's reading straight away: the location fix and the
         // network round trip then happen under real content instead of under a
         // spinner. Anything that arrives after this replaces it in place.
         if bundle == nil, let cached = await openingBundle() {
@@ -476,7 +497,7 @@ final class WeatherViewModel {
             await useCurrentLocation()
             if case .loaded = phase { return }
             // The device place resolved but its fetch failed (network blip).
-            // Keep it selected while there's content on screen — refresh()
+            // Keep it selected while there's content on screen, because refresh()
             // recovers it when the network returns. Falling through here used
             // to silently and stickily switch the app to a saved city. Only an
             // actual location failure (isShowingDeviceLocation still false) or
@@ -587,7 +608,7 @@ final class WeatherViewModel {
                 precipUnit: precipUnit
             )
             guard selectedPlace?.id == requestedID, cacheUnits == requestedUnits else { return }
-            // Alerts arrive via enrich, not the forecast — carry the on-screen
+            // Alerts arrive via enrich, not the forecast, so carry the on-screen
             // ones forward (dropping any that have expired) so a reload doesn't
             // blink the banner out, and a failed alerts re-fetch doesn't lose a
             // warning that's still in force. A successful empty answer from
@@ -696,6 +717,10 @@ final class WeatherViewModel {
         if let cloudTemp, cloudTemp != temperatureUnit { temperatureUnit = cloudTemp; unitsMoved = true }
         if let cloudSpeed, cloudSpeed != speedUnit { speedUnit = cloudSpeed; unitsMoved = true }
         if let cloudPrecip, cloudPrecip != precipUnit { precipUnit = cloudPrecip; unitsMoved = true }
+        // The voice is prose, not a unit: adopting it recomposes the brief in
+        // place rather than kicking a reload.
+        let cloudWhimsy = defaults.bool(forKey: Self.whimsyKey)
+        if cloudWhimsy != whimsyEnabled { whimsyEnabled = cloudWhimsy }
         // The unit didSets each kick a reload; nothing more to do here.
         _ = unitsMoved
     }

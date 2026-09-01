@@ -3,7 +3,7 @@
 //  Weather
 //
 //  Tap the sun readout in the bottom bar to open this page: the next sunrise
-//  or sunset, rated — how likely it is to be worth stepping outside (or
+//  or sunset, rated for how likely it is to be worth stepping outside (or
 //  setting an alarm) for. The background is the sky the forecast is promising:
 //  ember and gold when the clouds are set up to burn, ash and slate when they
 //  aren't. The headline is a verdict; the table below it is the evidence.
@@ -30,6 +30,8 @@ struct SunEventsView: View {
     let unit: TemperatureUnit
     /// The side the opening tap asked for; nil features the next event.
     var initialKind: SunEvent.Kind? = nil
+    /// The register the verdicts are written in, from the whimsy setting.
+    var voice: Voice = .editorial
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: String?
@@ -40,12 +42,12 @@ struct SunEventsView: View {
         SunQuality.upcomingEvents(in: bundle)
     }
 
-    /// The event the headline describes — the tapped row, or the next one up.
+    /// The event the headline describes: the tapped row, or the next one up.
     private var featured: SunEvent? {
         events.first { $0.id == selectedID } ?? events.first
     }
 
-    /// The next sunset and the next sunrise, in the order they'll arrive —
+    /// The next sunset and the next sunrise, in the order they'll arrive:
     /// the pair the switcher at the top of the page offers.
     private var nextPair: [SunEvent] {
         var pair: [SunEvent] = []
@@ -199,9 +201,10 @@ struct SunEventsView: View {
                     .foregroundStyle(rating.tier.accent)
                     .padding(.top, -8)
 
-                // The standfirst — same voice as the home screen's brief.
+                // The standfirst, in the same voice as the home screen's brief.
                 Text(SunQuality.narrative(kind: event.kind, rating: rating,
-                                          eventDate: event.date, timezone: timezone))
+                                          eventDate: event.date, timezone: timezone,
+                                          voice: voice))
                     .font(.serif(.callout, italic: true))
                     .foregroundStyle(.white.opacity(0.88))
                     .multilineTextAlignment(.center)
@@ -291,7 +294,7 @@ struct SunEventsView: View {
 
     // MARK: - The sky, itemized
 
-    /// The evidence behind the verdict — a quiet ledger, not a dashboard.
+    /// The evidence behind the verdict: a quiet ledger, not a dashboard.
     private func skyTable(_ event: SunEvent, _ rating: SunQuality.Rating) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("The sky at \(Fmt.time(event.date, timezone: timezone))")
@@ -379,7 +382,7 @@ struct SunEventsView: View {
                         .font(.serif(.subheadline, weight: isFeatured ? .semibold : .regular))
                         .foregroundStyle(.white.opacity(isFeatured ? 1 : 0.88))
                     Text(event.rating.map {
-                            "\(Fmt.time(event.date, timezone: timezone)) · \($0.signature)"
+                            "\(Fmt.time(event.date, timezone: timezone)) · \($0.signature(voice))"
                          } ?? Fmt.time(event.date, timezone: timezone))
                         .font(.serif(.caption, italic: true))
                         .foregroundStyle(.white.opacity(0.6))

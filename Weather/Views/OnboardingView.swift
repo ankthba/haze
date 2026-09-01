@@ -2,9 +2,10 @@
 //  OnboardingView.swift
 //  Weather
 //
-//  A six-page editorial introduction: the wordmark, the type, the radar, your
-//  units, comfort settings, and a choice of starting location. The sky palette
-//  crossfades as pages turn and each beat lands with its own haptic.
+//  A seven-page editorial introduction: the wordmark, the type, the radar,
+//  your units, comfort settings, the voice the forecast is written in, and a
+//  choice of starting location. The sky palette crossfades as pages turn and
+//  each beat lands with its own haptic.
 //
 
 import SwiftUI
@@ -26,21 +27,22 @@ struct OnboardingView: View {
     /// -1 = resting; 0/1/2 = dot, inner arcs, outer arcs lit.
     @State private var radarStep = -1
 
-    private static let pageCount = 6
+    private static let pageCount = 7
 
-    /// One sky per page: day, dusk, storm gray, day, night, dawn.
+    /// One sky per page: day, dusk, storm gray, day, night, late gold, dawn.
     private static let skies: [[UInt]] = [
         [0x3D86E6, 0x68A4E8, 0xBCD7F1],
         [0x1E376B, 0x73557F, 0xE89A63],
         [0x39465A, 0x5A6B7E, 0x93A2B0],
         [0x3D86E6, 0x68A4E8, 0xBCD7F1],
         [0x0A1230, 0x152149, 0x223560],
+        [0x3A5A8C, 0x8A7BA6, 0xF2C68C],
         [0xF3B58C, 0xDCA7BA, 0x96B8E2]
     ]
 
     var body: some View {
         ZStack {
-            // All six skies stacked; every sky up to the current page stays
+            // All seven skies stacked; every sky up to the current page stays
             // fully opaque, so a page turn fades the new sky in OVER the old
             // one. A plain crossfade dips both layers through half opacity at
             // once, which briefly let the app show through the cover.
@@ -67,7 +69,8 @@ struct OnboardingView: View {
                 radarPage.tag(2)
                 unitsPage.tag(3)
                 comfortPage.tag(4)
-                locationPage.tag(5)
+                voicePage.tag(5)
+                locationPage.tag(6)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -90,7 +93,7 @@ struct OnboardingView: View {
             switch newPage {
             case 1:  countUpSpecimen()
             case 2:  startRadarPulse()
-            case 5:  Haptics.crescendo()
+            case 6:  Haptics.crescendo()
             default: Haptics.selection()
             }
         }
@@ -271,6 +274,46 @@ struct OnboardingView: View {
         }
     }
 
+    /// The specimen is the whole argument here: the same forecast set both
+    /// ways, swapping under the toggle. Nobody can pick a register from its
+    /// name alone.
+    private var voicePage: some View {
+        pageLayout {
+            Text("Two ways to say it")
+                .font(.serif(.title2))
+                .foregroundStyle(.white)
+            Text("Haze writes the forecast out in sentences.\nPick the one that sounds like you.")
+                .font(.serif(.body, italic: true))
+                .foregroundStyle(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 6)
+
+            VStack(spacing: 10) {
+                Text(viewModel.voice.specimen)
+                    .font(.serif(.callout, italic: true))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .contentTransition(.opacity)
+                Text(viewModel.voice.notificationSpecimen)
+                    .font(.serif(.caption, italic: true))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .contentTransition(.opacity)
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            // Hold the block's height so the page doesn't jump as the two
+            // registers trade places under the toggle.
+            .frame(minHeight: 104, alignment: .top)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.whimsyEnabled)
+
+            comfortToggle("Whimsy mode", isOn: $viewModel.whimsyEnabled)
+                .padding(.top, 2)
+
+            Text("Changeable anytime in Settings.")
+                .font(.serif(.caption, italic: true))
+                .foregroundStyle(.white.opacity(0.65))
+        }
+    }
+
     private var locationPage: some View {
         pageLayout {
             Image(systemName: "location.fill")
@@ -320,7 +363,7 @@ struct OnboardingView: View {
         .padding(.vertical, 4)
     }
 
-    /// A device-wide accessibility setting shows as on and locks — same
+    /// A device-wide accessibility setting shows as on and locks, the same
     /// treatment as Settings, so the toggle never contradicts what's already
     /// visibly true on this very screen.
     private func comfortToggle(_ label: String, isOn: Binding<Bool>,

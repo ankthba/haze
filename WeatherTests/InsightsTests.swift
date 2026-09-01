@@ -4,7 +4,7 @@
 //
 //  The pure logic the app leans on hardest: rain-window detection, the brief's
 //  sentence branches, moon phase, and the local-time parsing that everything
-//  downstream depends on. No network, no UI — just the functions that would
+//  downstream depends on. No network, no UI, just the functions that would
 //  otherwise rot silently.
 //
 

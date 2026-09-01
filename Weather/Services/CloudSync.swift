@@ -4,8 +4,8 @@
 //
 //  Saved places and the settings worth carrying, mirrored through iCloud's
 //  key-value store so a new phone opens with your cities already in place.
-//  Deliberately small: no forecasts, no caches — the few kilobytes that are
-//  genuinely *yours*.
+//  Deliberately small: no forecasts, no caches, just the few kilobytes that
+//  are genuinely *yours*.
 //
 //  The store is best-effort by design (it needs an iCloud account and a
 //  network at some point); every read falls back to the local value.
@@ -33,6 +33,7 @@ enum CloudSync {
         "time_format", "text_size", "home_card_order",
         "show_trend_card", "show_radar_preview", "show_wind_compass",
         "show_sun_card", "show_daily_brief", "radar_autoplay",
+        Voice.defaultsKey,
     ]
 
     /// Push local values up. Called after any change worth carrying.

@@ -26,7 +26,7 @@ struct WeatherScreen: View {
     private var activeAlerts: [WeatherAlert] { bundle.alerts ?? [] }
 
     // Rain timing, the brief's prose, and today's rain likelihood are derived
-    // once per reading by the view model — computing them here made every
+    // once per reading by the view model; computing them here made every
     // frame of a city swipe re-walk the hourly series.
     private var nowcast: RainNowcast? { viewModel.nowcast }
     private var briefText: String { viewModel.briefText }
@@ -50,7 +50,8 @@ struct WeatherScreen: View {
                     VStack(spacing: 14) {
                         CurrentConditionsView(bundle: bundle,
                                               unit: viewModel.temperatureUnit,
-                                              nowcastLine: nowcast?.sentence(timezone: bundle.timezone))
+                                              nowcastLine: nowcast?.sentence(timezone: bundle.timezone,
+                                                                             voice: viewModel.voice))
                         if viewModel.showDailyBrief {
                             DailyBriefCard(text: briefText)
                         }
@@ -61,10 +62,10 @@ struct WeatherScreen: View {
                         homeCard(card)
                     }
 
-                    // Editorial share affordance — a colophon line, not chrome.
+                    // Editorial share affordance: a colophon line, not chrome.
                     ShareLink(item: ForecastShareCard(bundle: bundle),
                               preview: SharePreview(
-                                "\(bundle.place.name) — \(Fmt.tempDegree(bundle.current.temperature)), \(condition.description)")) {
+                                "\(bundle.place.name): \(Fmt.tempDegree(bundle.current.temperature)), \(condition.description)")) {
                         HStack(spacing: 7) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 13, weight: .medium))

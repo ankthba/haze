@@ -3,9 +3,9 @@
 //  Weather
 //
 //  Predicts how good a sunrise or sunset will look, from the forecast the app
-//  already holds — no extra network. The physics in brief: high and mid clouds
-//  are the canvas the low sun paints from below; low clouds are a wall between
-//  you and the horizon; haze mutes the palette; rain usually means no show.
+//  already holds, with no extra network. The physics in brief: high and mid
+//  clouds are the canvas the low sun paints from below; low clouds are a wall
+//  between you and the horizon; haze mutes the palette; rain means no show.
 //
 //  Scores are 0–100 and deliberately opinionated: a clear sky earns a middling
 //  score (pleasant, but nothing to catch fire), a broken deck of high cloud
@@ -57,17 +57,17 @@ nonisolated enum SunQuality {
 
         var tier: Tier { Tier(score: score) }
 
-        /// Two or three words naming the sky's defining feature — the reason
+        /// Two or three words naming the sky's defining feature, the reason
         /// behind the score, for list rows. Checked worst-news-first.
-        var signature: String {
+        func signature(_ voice: Voice = .editorial) -> String {
             let deck = min(cloudHigh + cloudMid * 0.5, 100)
-            if rainRisk >= 50 { return "rain likely" }
-            if cloudLow >= 60 { return "walled horizon" }
-            if deck > 78 { return "heavy sheet" }
-            if clarity < 55 { return "hazy air" }
-            if deck < 12 { return "bare sky" }
-            if canvas >= 80 { return "well-set clouds" }
-            return "mixed sky"
+            if rainRisk >= 50 { return voice.pick("rain likely", whimsy: "rain has other plans") }
+            if cloudLow >= 60 { return voice.pick("walled horizon", whimsy: "clouds in the doorway") }
+            if deck > 78 { return voice.pick("heavy sheet", whimsy: "one big gray lid") }
+            if clarity < 55 { return voice.pick("hazy air", whimsy: "a hazy hush") }
+            if deck < 12 { return voice.pick("bare sky", whimsy: "nothing to light up") }
+            if canvas >= 80 { return voice.pick("well-set clouds", whimsy: "clouds set just so") }
+            return voice.pick("mixed sky", whimsy: "a little of everything")
         }
     }
 
@@ -89,13 +89,23 @@ nonisolated enum SunQuality {
         }
 
         /// One line of expectation-setting under the score.
-        var blurb: String {
+        func blurb(_ voice: Voice = .editorial) -> String {
             switch self {
-            case .poor:        return "Cloud or rain will likely smother the color."
-            case .fair:        return "A quiet sky, soft light, little drama."
-            case .good:        return "Some color is likely along the horizon."
-            case .great:       return "Clouds are set up to catch real color."
-            case .spectacular: return "A painted sky is on the cards. Go look."
+            case .poor:
+                return voice.pick("Cloud or rain will likely smother the color.",
+                                  whimsy: "Cloud and rain are keeping this one to themselves.")
+            case .fair:
+                return voice.pick("A quiet sky, soft light, little drama.",
+                                  whimsy: "A soft, quiet sky. Pretty, in a small way.")
+            case .good:
+                return voice.pick("Some color is likely along the horizon.",
+                                  whimsy: "A little color should turn up along the horizon.")
+            case .great:
+                return voice.pick("Clouds are set up to catch real color.",
+                                  whimsy: "The clouds are lined up and waiting for the light.")
+            case .spectacular:
+                return voice.pick("A painted sky is on the cards. Go look.",
+                                  whimsy: "The sky is going all out. Go and see.")
             }
         }
     }
@@ -182,18 +192,18 @@ nonisolated enum SunQuality {
         // rain-free evening from accumulating "free" points into a top score
         // when there is nothing overhead to light up.
 
-        // — Canvas: high cloud lights up best, mid cloud counts for half.
+        // Canvas: high cloud lights up best, mid cloud counts for half.
         //   The sweet spot is a broken deck (~30–60%); clear is pleasant but
         //   plain, and a solid sheet goes gray.
         let deck = min(high + mid * 0.5, 100)
         let canvas = ramp(deck, points: [(0, 45), (15, 70), (30, 100), (60, 100),
                                          (80, 40), (100, 22)])
 
-        // — Horizon: low cloud stands between you and the light. A few
+        // Horizon: low cloud stands between you and the light. A few
         //   fair-weather clouds are harmless; a closed deck ends the show.
         let horizon = ramp(low, points: [(0, 100), (15, 100), (40, 55), (70, 18), (100, 8)])
 
-        // — Clarity: how clean the light's path is. Visibility where the model
+        // Clarity: how clean the light's path is. Visibility where the model
         //   provides it, humidity as the haze proxy otherwise; heavy humidity
         //   mutes the palette either way.
         var clarity: Double
@@ -205,7 +215,7 @@ nonisolated enum SunQuality {
         }
         if humidity > 85 { clarity = min(clarity, 62) }
 
-        // — Rain: a steepening drag, then a hard veto below.
+        // Rain: a steepening drag, then a hard veto below.
         let rain = 100 - precipProb * 0.7
 
         var score = canvas * (horizon / 100) * (clarity / 100) * (rain / 100)
@@ -226,14 +236,15 @@ nonisolated enum SunQuality {
 
     // MARK: - Narrative
 
-    /// Two or three warm sentences about the event — the same editorial voice
+    /// Two or three warm sentences about the event, the same editorial voice
     /// as the home screen's daily brief. Verdict first, then timing advice,
     /// then a garnish about the air; each sentence earns its place or is
-    /// dropped.
+    /// dropped. Whimsy mode swaps the wording, not the structure.
     static func narrative(kind: SunEvent.Kind,
                           rating: Rating,
                           eventDate: Date,
-                          timezone: TimeZone) -> String {
+                          timezone: TimeZone,
+                          voice: Voice = .editorial) -> String {
         let deck = min(rating.cloudHigh + rating.cloudMid * 0.5, 100)
         let time = Fmt.time(eventDate, timezone: timezone)
         let sunset = kind == .sunset
@@ -242,29 +253,41 @@ nonisolated enum SunQuality {
         switch rating.tier {
         case .spectacular:
             verdict = sunset
-                ? "The sky is set up for something special this evening, with a broken deck of high cloud ready to catch fire as the sun slips under."
-                : "The sky is set up for something special, with a broken deck of high cloud ready to catch first light and burn."
+                ? voice.pick("The sky is set up for something special this evening, with a broken deck of high cloud ready to catch fire as the sun slips under.",
+                             whimsy: "Tonight the sky is going all out, with a broken deck of high cloud waiting to catch fire as the sun slips under.")
+                : voice.pick("The sky is set up for something special, with a broken deck of high cloud ready to catch first light and burn.",
+                             whimsy: "The sky is going all out, with a broken deck of high cloud waiting to take the first light and glow.")
         case .great:
             verdict = sunset
-                ? "The clouds are arranged kindly tonight; expect real color climbing off the horizon."
-                : "The clouds are arranged kindly for the morning; expect real color before the sun clears the horizon."
+                ? voice.pick("The clouds are arranged kindly tonight; expect real color climbing off the horizon.",
+                             whimsy: "The clouds have lined themselves up beautifully tonight, so expect real color climbing off the horizon.")
+                : voice.pick("The clouds are arranged kindly for the morning; expect real color before the sun clears the horizon.",
+                             whimsy: "The clouds have lined themselves up beautifully for the morning, so expect real color before the sun clears the horizon.")
         case .good:
             verdict = deck < 15
-                ? "A clean, quiet sky. Expect a soft amber glow rather than fireworks."
-                : "Some color is likely, with patches of high cloud warming as the light comes in low."
+                ? voice.pick("A clean, quiet sky. Expect a soft amber glow rather than fireworks.",
+                             whimsy: "A clean, quiet sky. A soft amber glow, no fireworks.")
+                : voice.pick("Some color is likely, with patches of high cloud warming as the light comes in low.",
+                             whimsy: "Some color is likely, with patches of high cloud ready to catch the low light.")
         case .fair:
             verdict = rating.cloudLow >= 45
-                ? "Low cloud sits along the horizon, so most of the show will happen behind it."
-                : "A muted sky, with little up there for the light to work with."
+                ? voice.pick("Low cloud sits along the horizon, so most of the show will happen behind it.",
+                             whimsy: "Low cloud has settled along the horizon, so most of the show happens behind it.")
+                : voice.pick("A muted sky, with little up there for the light to work with.",
+                             whimsy: "A gentle, muted sky, with not much up there for the light to play with.")
         case .poor:
             if rating.rainRisk >= 50 {
                 verdict = sunset
-                    ? "Rain is likely around sunset; the light will go quietly."
-                    : "Rain is likely around sunrise; the day will arrive quietly."
+                    ? voice.pick("Rain is likely around sunset; the light will go quietly.",
+                                 whimsy: "Rain is likely around sunset, so the light will slip away quietly.")
+                    : voice.pick("Rain is likely around sunrise; the day will arrive quietly.",
+                                 whimsy: "Rain is likely around sunrise, so the day will let itself in quietly.")
             } else {
                 verdict = sunset
-                    ? "An overcast lid tonight; the sun will slip away unseen."
-                    : "An overcast lid this morning; the sun will arrive unseen."
+                    ? voice.pick("An overcast lid tonight; the sun will slip away unseen.",
+                                 whimsy: "A gray lid tonight, so the sun will slip out the back way.")
+                    : voice.pick("An overcast lid this morning; the sun will arrive unseen.",
+                                 whimsy: "A gray lid this morning, so the sun will let itself in unseen.")
             }
         }
 
@@ -272,12 +295,16 @@ nonisolated enum SunQuality {
         switch rating.tier {
         case .great, .spectacular:
             timing = sunset
-                ? "The best of it usually lands ten to twenty minutes after \(time), so stay a while."
-                : "Worth the early alarm. The color peaks in the minutes before \(time)."
+                ? voice.pick("The best of it usually lands ten to twenty minutes after \(time), so stay a while.",
+                             whimsy: "The best of it usually lands ten to twenty minutes after \(time), so linger a while.")
+                : voice.pick("Worth the early alarm. The color peaks in the minutes before \(time).",
+                             whimsy: "Worth the early alarm. The color gathers in the minutes before \(time).")
         case .good:
             timing = sunset
-                ? "Golden hour runs the hour before \(time)."
-                : "First light starts warming the sky well before \(time)."
+                ? voice.pick("Golden hour runs the hour before \(time).",
+                             whimsy: "Golden hour runs the hour before \(time), and it's the good bit.")
+                : voice.pick("First light starts warming the sky well before \(time).",
+                             whimsy: "The sky starts warming well before \(time), gently at first.")
         case .fair, .poor:
             timing = nil
         }
@@ -285,9 +312,11 @@ nonisolated enum SunQuality {
         var garnish: String?
         if rating.tier != .poor {
             if rating.clarity >= 88 {
-                garnish = "The air is clean, so whatever color arrives will carry."
+                garnish = voice.pick("The air is clean, so whatever color arrives will carry.",
+                                     whimsy: "The air is clear, so every bit of color will carry.")
             } else if rating.clarity < 60 {
-                garnish = "Haze will soften whatever color arrives."
+                garnish = voice.pick("Haze will soften whatever color arrives.",
+                                     whimsy: "Haze will soften the color into something gentler.")
             }
         }
 

@@ -5,9 +5,13 @@
 //  Scheduled, quiet notifications: the morning digest (the daily brief as a
 //  notification, at a time the user chooses) and the golden-hour heads-up.
 //  Content is rebuilt from the freshest forecast every time the app runs or a
-//  background check fires, so the scheduled copy is as current as it can be —
+//  background check fires, so the scheduled copy is as current as it can be,
 //  and honestly no more: a digest scheduled overnight describes the forecast
 //  as of the last refresh before it fires.
+//
+//  Copy is composed in whichever register `Voice.current` names, read at the
+//  moment each request is built so a background rebuild speaks the same way
+//  the app on screen does.
 //
 
 import Foundation
@@ -54,7 +58,7 @@ enum NotificationPlanner {
     private static let sunriseID = "sunrise-alert"
 
     /// Both alerts default on with quality gates chosen so they only speak
-    /// when the sky is worth it — the setting most people would pick.
+    /// when the sky is worth it, the setting most people would pick.
     static var sunsetAlertEnabled: Bool {
         get { UserDefaults.standard.object(forKey: sunsetAlertEnabledKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: sunsetAlertEnabledKey) }
@@ -137,21 +141,33 @@ enum NotificationPlanner {
         guard let day = bundle.daily.first(where: { cal.isDate($0.date, inSameDayAs: fireDate) })
         else { return }
 
-        var lines = ["High \(Fmt.tempDegree(day.tempMax)), low \(Fmt.tempDegree(day.tempMin)) — \(day.condition.description.lowercased())."]
+        let voice = Voice.current
+        let high = Fmt.tempDegree(day.tempMax)
+        let low = Fmt.tempDegree(day.tempMin)
+        let sky = day.condition.description.lowercased()
+        var lines = [voice.pick("High \(high), low \(low), \(sky).",
+                                whimsy: "A high of \(high) and a low of \(low), under a \(sky) sky.")]
         let dayHours = bundle.hours(on: fireDate).filter { $0.date > fireDate }
         if let firstRain = dayHours.first(where: { $0.precipitationProbability >= 55 }) {
-            lines.append("Rain likely near \(Fmt.hour(firstRain.date, timezone: bundle.timezone)) — take the umbrella.")
+            let near = Fmt.hour(firstRain.date, timezone: bundle.timezone)
+            lines.append(voice.pick("Rain likely near \(near), so take the umbrella.",
+                                    whimsy: "Rain should find you near \(near), so take the umbrella."))
         } else if day.precipitationProbabilityMax >= 40 {
-            lines.append("A \(Fmt.percent(day.precipitationProbabilityMax)) chance of rain at some point.")
+            let odds = Fmt.percent(day.precipitationProbabilityMax)
+            lines.append(voice.pick("A \(odds) chance of rain at some point.",
+                                    whimsy: "A \(odds) chance of rain wandering through at some point."))
         }
         if let snow = day.snowfallSum, snow > 0.2 {
-            lines.append(usesFahrenheit
-                ? String(format: "Snow totals near %.1f in.", snow)
-                : String(format: "Snow totals near %.0f cm.", snow))
+            let amount = usesFahrenheit
+                ? String(format: "%.1f in", snow)
+                : String(format: "%.0f cm", snow)
+            lines.append(voice.pick("Snow totals near \(amount).",
+                                    whimsy: "About \(amount) of snow piling up."))
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "This morning in \(bundle.place.name)"
+        content.title = voice.pick("This morning in \(bundle.place.name)",
+                                   whimsy: "Good morning, \(bundle.place.name)")
         content.body = lines.joined(separator: " ")
         content.sound = .default
 
@@ -191,9 +207,15 @@ enum NotificationPlanner {
             }
             guard rating.score >= gate.minScore else { continue }
 
+            let voice = Voice.current
+            let at = Fmt.time(event, timezone: bundle.timezone)
+            let tier = rating.tier.rawValue.lowercased()
             let content = UNMutableNotificationContent()
-            content.title = "\(kind.rawValue) at \(Fmt.time(event, timezone: bundle.timezone))"
-            content.body = "Rates \(rating.score), \(rating.tier.rawValue.lowercased()). \(rating.tier.blurb)"
+            content.title = voice.pick("\(kind.rawValue) at \(at)",
+                                       whimsy: "A \(kind.rawValue.lowercased()) worth seeing, at \(at)")
+            content.body = voice.pick(
+                "Rates \(rating.score), \(tier). \(rating.tier.blurb(voice))",
+                whimsy: "\(rating.score) out of 100, which is \(tier). \(rating.tier.blurb(voice))")
             content.sound = .default
 
             var cal = Calendar(identifier: .gregorian)
@@ -227,9 +249,13 @@ enum NotificationPlanner {
             break
         }
 
+        let voice = Voice.current
+        let turns = Fmt.time(sunset.addingTimeInterval(-3600), timezone: bundle.timezone)
         let content = UNMutableNotificationContent()
-        content.title = "Golden hour soon"
-        content.body = "The light turns at \(Fmt.time(sunset.addingTimeInterval(-3600), timezone: bundle.timezone)) in \(bundle.place.name)."
+        content.title = voice.pick("Golden hour soon", whimsy: "The light is about to turn")
+        content.body = voice.pick(
+            "The light turns at \(turns) in \(bundle.place.name).",
+            whimsy: "The golden hour begins at \(turns) in \(bundle.place.name). Find a window facing west.")
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(

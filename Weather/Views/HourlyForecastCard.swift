@@ -65,7 +65,7 @@ private struct HourColumn: View {
                 .foregroundStyle(.white)
         }
         .frame(minWidth: 42)
-        // One VoiceOver stop per hour, with every value in context — not four
+        // One VoiceOver stop per hour, with every value in context, not four
         // floating fragments ("3PM", a symbol, "30%", "72°") per column.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
