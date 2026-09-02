@@ -15,6 +15,9 @@ struct DayDetailView: View {
     let bundle: WeatherBundle
     let unit: TemperatureUnit
     let speedUnit: SpeedUnit
+    /// Set when the page is shown as a card in the Mac window rather than a
+    /// presented sheet: closing goes here instead of through `dismiss`.
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -77,7 +80,7 @@ struct DayDetailView: View {
             HStack {
                 Spacer()
                 Button {
-                    dismiss()
+                    if let onClose { onClose() } else { dismiss() }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .semibold))

@@ -8,10 +8,10 @@
 //  and dissolves into the background instead of being cut off by a hard line or
 //  covered by a flat frosted scrim.
 //
-//  UIKit and AppKit sit on the same Core Animation backdrop machinery. On the
-//  iPhone the filter is swapped onto UIVisualEffectView's backdrop layer; on
-//  the Mac the app hosts a backdrop layer of its own, with only that filter on
-//  it, so the glass reads identically on both.
+//  UIKit and AppKit each wrap the same Core Animation backdrop machinery:
+//  UIVisualEffectView on the iPhone, NSVisualEffectView on the Mac. Both are
+//  handed the filter the same way, by swapping it onto the backdrop layer and
+//  hushing the material's own tint, so the glass reads identically on both.
 //
 
 import SwiftUI
@@ -228,18 +228,48 @@ final class BackdropBlurUIView: UIVisualEffectView {
 
 // MARK: - AppKit
 
-/// The same construction UIVisualEffectView uses underneath, with nothing on
-/// top: a view whose backing layer is Core Animation's backdrop layer, carrying
-/// exactly one filter. AppKit's own NSVisualEffectView keeps re-installing its
-/// material's filters (blur, saturation, a tint) whenever it updates, and a
-/// material is the one thing the app's glass must not have; the caller stacks
-/// its own frost and rim over a clean blur.
-private final class BackdropHostView: NSView {
-    private let filter: NSObject?
+/// AppKit's NSVisualEffectView owns a properly wired backdrop layer (a bare
+/// CABackdropLayer hosted by hand draws nothing on the Mac). It also rewrites
+/// that layer's filters and tint every time it updates, so the app's filter
+/// is re-installed after each `updateLayer`, which is the last word AppKit
+/// has, and the material's own tint and vibrancy layers are silenced.
+@MainActor
+private enum EffectViewBackdrop {
+    static func install(_ filter: NSObject?, in view: NSVisualEffectView) {
+        guard let filter, let root = view.layer, let backdrop = find(in: root) else { return }
+        if let current = backdrop.filters?.first as? NSObject, current === filter,
+           backdrop.filters?.count == 1 { return }
+        backdrop.filters = [filter]
+        for sublayer in backdrop.sublayers ?? [] { sublayer.opacity = 0 }
+        for sibling in backdrop.superlayer?.sublayers ?? [] where sibling !== backdrop {
+            sibling.opacity = 0
+        }
+        if let scale = view.window?.backingScaleFactor {
+            backdrop.setValue(scale, forKey: "scale")
+        }
+    }
 
-    init(filter: NSObject?) {
-        self.filter = filter
+    private static func find(in layer: CALayer) -> CALayer? {
+        if String(describing: type(of: layer)).contains("Backdrop") { return layer }
+        for sublayer in layer.sublayers ?? [] {
+            if let found = find(in: sublayer) { return found }
+        }
+        return nil
+    }
+}
+
+/// The shared bones of both Mac blur views: a within-window effect view that
+/// never takes a click and re-asserts its filter whenever AppKit redraws.
+class BackdropEffectView: NSVisualEffectView {
+    var filter: NSObject? {
+        didSet { EffectViewBackdrop.install(filter, in: self) }
+    }
+
+    init() {
         super.init(frame: .zero)
+        blendingMode = .withinWindow
+        material = .hudWindow
+        state = .active
         wantsLayer = true
     }
 
@@ -251,33 +281,24 @@ private final class BackdropHostView: NSView {
     /// Decoration only; never in the way of a click.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    override func makeBackingLayer() -> CALayer {
-        let layer: CALayer
-        if let backdropClass = NSClassFromString("CABackdropLayer") as? CALayer.Type {
-            layer = backdropClass.init()
-        } else {
-            layer = CALayer()
-        }
-        if let filter { layer.filters = [filter] }
-        return layer
+    override func updateLayer() {
+        super.updateLayer()
+        EffectViewBackdrop.install(filter, in: self)
     }
 
-    func replaceFilter(_ newFilter: NSObject?) {
-        layer?.filters = newFilter.map { [$0] } ?? []
-    }
-
-    /// The backdrop samples at the window's scale; a layer that doesn't know
-    /// it reads soft on a Retina display.
-    override func viewDidChangeBackingProperties() {
-        super.viewDidChangeBackingProperties()
-        guard let scale = window?.backingScaleFactor, let layer else { return }
-        layer.contentsScale = scale
-        layer.setValue(scale, forKey: "scale")
+    override func layout() {
+        super.layout()
+        EffectViewBackdrop.install(filter, in: self)
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        viewDidChangeBackingProperties()
+        EffectViewBackdrop.install(filter, in: self)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        EffectViewBackdrop.install(filter, in: self)
     }
 }
 
@@ -302,30 +323,20 @@ struct VariableBlurView: NSViewRepresentable {
     }
 }
 
-final class VariableBlurNSView: NSView {
+final class VariableBlurNSView: BackdropEffectView {
     private var maxRadius: CGFloat
     private var direction: VariableBlurView.Direction
     private var fadeFrom: CGFloat
-    private let host: BackdropHostView
     private let fade = CAGradientLayer()
 
     init(maxRadius: CGFloat, direction: VariableBlurView.Direction, fadeFrom: CGFloat) {
         self.maxRadius = maxRadius
         self.direction = direction
         self.fadeFrom = fadeFrom
-        host = BackdropHostView(filter: Self.filter(radius: maxRadius, direction: direction))
-        super.init(frame: .zero)
-        wantsLayer = true
-        host.autoresizingMask = [.width, .height]
-        addSubview(host)
+        super.init()
+        filter = Self.filter(radius: maxRadius, direction: direction)
         applyFade()
     }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     private static func filter(radius: CGFloat, direction: VariableBlurView.Direction) -> NSObject? {
         guard let mask = BackdropFilters.gradientMask(direction: direction) else { return nil }
@@ -336,7 +347,7 @@ final class VariableBlurNSView: NSView {
         if maxRadius != self.maxRadius || direction != self.direction {
             self.maxRadius = maxRadius
             self.direction = direction
-            host.replaceFilter(Self.filter(radius: maxRadius, direction: direction))
+            filter = Self.filter(radius: maxRadius, direction: direction)
         }
         if fadeFrom != self.fadeFrom {
             self.fadeFrom = fadeFrom
@@ -346,7 +357,6 @@ final class VariableBlurNSView: NSView {
 
     override func layout() {
         super.layout()
-        host.frame = bounds
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fade.frame = bounds
@@ -388,34 +398,19 @@ struct BackdropBlurView: NSViewRepresentable {
     }
 }
 
-final class BackdropBlurNSView: NSView {
+final class BackdropBlurNSView: BackdropEffectView {
     private var radius: CGFloat
-    private let host: BackdropHostView
 
     init(radius: CGFloat) {
         self.radius = radius
-        host = BackdropHostView(filter: BackdropFilters.gaussian(radius: radius))
-        super.init(frame: .zero)
-        wantsLayer = true
-        host.autoresizingMask = [.width, .height]
-        addSubview(host)
+        super.init()
+        filter = BackdropFilters.gaussian(radius: radius)
     }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     func update(radius: CGFloat) {
         guard radius != self.radius else { return }
         self.radius = radius
-        host.replaceFilter(BackdropFilters.gaussian(radius: radius))
-    }
-
-    override func layout() {
-        super.layout()
-        host.frame = bounds
+        filter = BackdropFilters.gaussian(radius: radius)
     }
 }
 

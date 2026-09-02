@@ -2,9 +2,9 @@
 //  MacWindows.swift
 //  HazeMac
 //
-//  The bits of window state that menu commands and toolbar buttons share:
-//  which sheet is up, which side of the sun page was asked for, and a nudge
-//  that moves focus into the sidebar's search field.
+//  The bits of window state that menu commands and the floating buttons share:
+//  which column is showing, which panel is open and how wide, which sheet is
+//  up, and a nudge that moves focus into the search field.
 //
 
 import Foundation
@@ -14,16 +14,39 @@ import Observation
 @Observable
 final class MacWindows {
     static let mainWindowID = "main"
-    static let radarWindowID = "radar"
+
+    /// What the right-hand panel holds. Settings and the radar live in the
+    /// window, beside the page, rather than in windows of their own.
+    enum Panel: Equatable {
+        case settings
+        case radar
+    }
 
     /// The locations column; ⌃⌘S or the list button folds it away.
     var sidebarVisible = true
+    var panel: Panel?
+    /// The panel grown to the whole page, and back to a column.
+    var panelExpanded = false
+
     var showSunEvents = false
     var sunEventsKind: SunEvent.Kind = .sunset
     var showAlerts = false
     /// Bumped by ⌘F and by "Choose a City" in the intro; the sidebar answers
     /// by putting the cursor in its search field.
     var searchFocusRequest = 0
+
+    /// The buttons toggle: the same one again closes the panel.
+    func toggle(_ which: Panel) {
+        if panel == which {
+            panel = nil
+        } else {
+            panel = which
+        }
+    }
+
+    func closePanel() {
+        panel = nil
+    }
 
     func openSun(_ kind: SunEvent.Kind) {
         sunEventsKind = kind

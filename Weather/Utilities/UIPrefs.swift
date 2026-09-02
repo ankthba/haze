@@ -44,6 +44,11 @@ final class UIPrefs {
     /// Suppresses decorative motion: radar opens paused, pulsing icons hold still.
     var reduceMotion: Bool { reduceMotionOverride || systemReduceMotion }
 
+    /// The Mac has no Dynamic Type, so the in-app text-size setting scales the
+    /// serif faces directly (see `Font.serif`). Always 1 on the iPhone, where
+    /// the `relativeTo:` text style does the scaling.
+    var textScale: CGFloat = 1
+
     // MARK: - In-app overrides (persisted; what the Settings toggles bind to)
 
     var boldTextOverride: Bool {

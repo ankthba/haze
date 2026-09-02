@@ -93,8 +93,9 @@ struct DetailsSection: View {
                 }
             }
         }
-        .sheet(item: $selectedMetric) { metric in
-            MetricDetailView(metric: metric, bundle: bundle, unit: unit, voice: voice)
+        .hazeSheet(item: $selectedMetric) { metric, close in
+            MetricDetailView(metric: metric, bundle: bundle, unit: unit, voice: voice,
+                             onClose: close)
         }
     }
 

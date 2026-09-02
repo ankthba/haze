@@ -189,7 +189,7 @@ extension Font {
     static func serif(size: CGFloat, relativeTo style: Font.TextStyle = .body,
                       italic: Bool = false, weight: Font.Weight = .regular) -> Font {
         .custom(faceName(italic: italic, weight: weight),
-                size: size, relativeTo: style)
+                size: size * UIPrefs.shared.textScale, relativeTo: style)
     }
 
     /// EB Garamond sized to match a Dynamic Type text style.
@@ -217,7 +217,8 @@ extension Font {
     /// Instrument Serif, kept solely for oversized display numerals (the hero
     /// temperature) where Garamond's proportions feel too bookish.
     static func displaySerif(size: CGFloat) -> Font {
-        .custom("InstrumentSerif-Regular", size: size, relativeTo: .largeTitle)
+        .custom("InstrumentSerif-Regular", size: size * UIPrefs.shared.textScale,
+                relativeTo: .largeTitle)
     }
 
     /// Garamond's x-height runs ~15% smaller than the system font's, so these

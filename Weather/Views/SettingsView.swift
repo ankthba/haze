@@ -11,8 +11,16 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var viewModel: WeatherViewModel
+    /// Set when the page lives in the Mac's side panel: it then wears the
+    /// radar's pinned header, with the panel's grow and close controls.
+    var onClose: (() -> Void)? = nil
+    var onToggleExpand: (() -> Void)? = nil
+    var isExpanded = false
+
     @Bindable var prefs = UIPrefs.shared
     @Environment(\.dismiss) private var dismiss
+
+    private var inPanel: Bool { onClose != nil }
 
     // Sky derived from the current data, with safe fallbacks for a nil bundle.
     private var skyCondition: WeatherCondition {
@@ -31,11 +39,13 @@ struct SettingsView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     VStack(spacing: 20) {
-                        Text("Settings")
-                            .font(.serif(.largeTitle))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 4)
+                        if !inPanel {
+                            Text("Settings")
+                                .font(.serif(.largeTitle))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        }
 
                         textSizeCard
                         #if os(iOS)
@@ -62,11 +72,16 @@ struct SettingsView: View {
                     // Pin the content's width to the scroll container: without this
                     // a child with a wide intrinsic size (segmented pickers at large
                     // type) widens the content and the vertical scroller starts
-                    // panning sideways.
-                    .containerRelativeFrame(.horizontal)
+                    // panning sideways. (On the Mac the "container" resolves to
+                    // the window, which would spread a panel's content across
+                    // the whole window; the glass controls there have no wide
+                    // intrinsic size, so the plain frame is enough.)
+                    .pinnedToContainerWidth()
                 }
                 .scrollIndicators(.hidden)
-                .safeAreaInset(edge: .top) { Color.clear.frame(height: Platform.sheetTopInset) }
+                .safeAreaInset(edge: .top) {
+                    Color.clear.frame(height: inPanel ? 76 : Platform.sheetTopInset)
+                }
                 // Screenshot/automation hook, a sibling of -openSettings.
                 .onAppear {
                     if ProcessInfo.processInfo.arguments.contains("-scrollToNotifications") {
@@ -79,9 +94,10 @@ struct SettingsView: View {
             TopScrollBlur(maxRadius: 8, height: 72)
                 .allowsHitTesting(false)
 
-            // A Mac Settings window closes from its own title bar.
             #if os(iOS)
             topBar
+            #else
+            if inPanel { panelHeader }
             #endif
         }
         .colorScheme(.dark)
@@ -111,20 +127,60 @@ struct SettingsView: View {
         }
     }
 
+    /// The radar's header, for the page's turn in the panel: what this is on
+    /// the left, the panel's controls on the right, on the window's top row.
+    private var panelHeader: some View {
+        VStack {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    CardLabel(systemImage: "thermometer.variable.and.figure", title: "Preferences")
+                    Text("Settings")
+                        .font(.serif(size: 27))
+                        .foregroundStyle(.white)
+                }
+                Spacer(minLength: 12)
+                if let onToggleExpand {
+                    Button {
+                        Haptics.tap()
+                        onToggleExpand()
+                    } label: {
+                        Image(systemName: isExpanded
+                              ? "arrow.down.right.and.arrow.up.left"
+                              : "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 38, height: 38)
+                    }
+                    .buttonStyle(CardButtonStyle())
+                    .help(isExpanded ? "Back to a column" : "Fill the page")
+                }
+                Button {
+                    Haptics.tap()
+                    onClose?()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(CardButtonStyle())
+                .keyboardShortcut(.cancelAction)
+                .help("Close (Esc)")
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 22)
+            .padding(.top, 7)
+            Spacer()
+        }
+    }
+
     // MARK: - Cards
 
     private var textSizeCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 18) {
                 CardLabel(systemImage: "textformat.size", title: "Text Size")
-                Picker("Text Size", selection: $viewModel.textSize) {
-                    ForEach(WeatherViewModel.TextSize.allCases) { size in
-                        Text(size.label).tag(size)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .sensoryFeedback(.selection, trigger: viewModel.textSize)
+                SegmentedChoice(selection: $viewModel.textSize,
+                                options: WeatherViewModel.TextSize.allCases.map { ($0.label, $0) })
+                    .sensoryFeedback(.selection, trigger: viewModel.textSize)
 
                 Text("Scales every word and number in the app.")
                     .font(.serif(.caption))
@@ -137,14 +193,10 @@ struct SettingsView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 18) {
                 CardLabel(systemImage: "clock", title: "Time Format")
-                Picker("Time Format", selection: $viewModel.timeFormat) {
-                    Text("Auto").tag(TimeFormat.system)
-                    Text("12-hour").tag(TimeFormat.twelveHour)
-                    Text("24-hour").tag(TimeFormat.twentyFourHour)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .sensoryFeedback(.selection, trigger: viewModel.timeFormat)
+                SegmentedChoice(selection: $viewModel.timeFormat,
+                                options: [("Auto", .system), ("12-hour", .twelveHour),
+                                          ("24-hour", .twentyFourHour)])
+                    .sensoryFeedback(.selection, trigger: viewModel.timeFormat)
             }
         }
     }
@@ -236,6 +288,7 @@ struct SettingsView: View {
                 .font(.serif(.subheadline, weight: .medium))
                 .foregroundStyle(.white)
         }
+        .hazeToggleStyle()
         .tint(.white.opacity(0.35))
         .sensoryFeedback(.selection, trigger: isOn.wrappedValue)
     }
@@ -358,34 +411,24 @@ struct SettingsView: View {
                 CardLabel(systemImage: "ruler", title: "Units")
 
                 unitRow("Temperature") {
-                    Picker("Temperature", selection: $viewModel.temperatureUnit) {
-                        Text("°F").tag(TemperatureUnit.fahrenheit)
-                        Text("°C").tag(TemperatureUnit.celsius)
-                    }
-                    .sensoryFeedback(.selection, trigger: viewModel.temperatureUnit)
+                    SegmentedChoice(selection: $viewModel.temperatureUnit,
+                                    options: [("°F", .fahrenheit), ("°C", .celsius)])
+                        .sensoryFeedback(.selection, trigger: viewModel.temperatureUnit)
                 }
                 unitRow("Wind") {
-                    Picker("Wind", selection: $viewModel.speedUnit) {
-                        Text("mph").tag(SpeedUnit.mph)
-                        Text("km/h").tag(SpeedUnit.kmh)
-                        Text("m/s").tag(SpeedUnit.ms)
-                    }
-                    .sensoryFeedback(.selection, trigger: viewModel.speedUnit)
+                    SegmentedChoice(selection: $viewModel.speedUnit,
+                                    options: [("mph", .mph), ("km/h", .kmh), ("m/s", .ms)])
+                        .sensoryFeedback(.selection, trigger: viewModel.speedUnit)
                 }
                 unitRow("Precipitation") {
-                    Picker("Precipitation", selection: $viewModel.precipUnit) {
-                        Text("Auto").tag(PrecipUnit.auto)
-                        Text("in").tag(PrecipUnit.inch)
-                        Text("mm").tag(PrecipUnit.mm)
-                    }
-                    .sensoryFeedback(.selection, trigger: viewModel.precipUnit)
+                    SegmentedChoice(selection: $viewModel.precipUnit,
+                                    options: [("Auto", .auto), ("in", .inch), ("mm", .mm)])
+                        .sensoryFeedback(.selection, trigger: viewModel.precipUnit)
                 }
                 unitRow("Pressure") {
-                    Picker("Pressure", selection: $viewModel.pressureUnit) {
-                        Text("hPa").tag(PressureUnit.hPa)
-                        Text("inHg").tag(PressureUnit.inHg)
-                    }
-                    .sensoryFeedback(.selection, trigger: viewModel.pressureUnit)
+                    SegmentedChoice(selection: $viewModel.pressureUnit,
+                                    options: [("hPa", .hPa), ("inHg", .inHg)])
+                        .sensoryFeedback(.selection, trigger: viewModel.pressureUnit)
                 }
 
                 Text("Auto precipitation follows the temperature unit: inches with °F, millimetres with °C.")
@@ -403,8 +446,6 @@ struct SettingsView: View {
                 .font(.serif(.subheadline, weight: .medium))
                 .foregroundStyle(.white)
             picker()
-                .pickerStyle(.segmented)
-                .labelsHidden()
         }
     }
 
@@ -544,15 +585,10 @@ struct SettingsView: View {
                     Text("Refresh while open")
                         .font(.serif(.subheadline, weight: .medium))
                         .foregroundStyle(.white)
-                    Picker("Refresh", selection: $viewModel.refreshMinutes) {
-                        Text("5 min").tag(5)
-                        Text("15 min").tag(15)
-                        Text("30 min").tag(30)
-                        Text("1 hr").tag(60)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .sensoryFeedback(.selection, trigger: viewModel.refreshMinutes)
+                    SegmentedChoice(selection: $viewModel.refreshMinutes,
+                                    options: [("5 min", 5), ("15 min", 15),
+                                              ("30 min", 30), ("1 hr", 60)])
+                        .sensoryFeedback(.selection, trigger: viewModel.refreshMinutes)
                 }
 
                 Text("When location is off, Haze opens with your first saved place.")

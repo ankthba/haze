@@ -3,7 +3,8 @@
 //  HazeMac
 //
 //  The menu bar's share of the app: a Location menu for finding, choosing, and
-//  refreshing, and the radar and sun pages under View. Every item has a key.
+//  refreshing; the panel and the sun page under View; Settings under ⌘, where
+//  a Mac expects it. Every item has a key.
 //
 
 import SwiftUI
@@ -12,11 +13,16 @@ struct MacCommands: Commands {
     let viewModel: WeatherViewModel
     let windows: MacWindows
 
-    @Environment(\.openWindow) private var openWindow
-
     var body: some Commands {
         // One window is the app; a second would only be a twin of the first.
         CommandGroup(replacing: .newItem) {}
+
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                windows.toggle(.settings)
+            }
+            .keyboardShortcut(",")
+        }
 
         CommandMenu("Location") {
             Button("Find a City…") {
@@ -56,10 +62,16 @@ struct MacCommands: Commands {
             .keyboardShortcut("s", modifiers: [.command, .control])
             Divider()
             Button("Radar") {
-                openWindow(id: MacWindows.radarWindowID)
+                windows.toggle(.radar)
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             .disabled(viewModel.bundle == nil)
+
+            Button(windows.panelExpanded ? "Shrink Panel" : "Expand Panel") {
+                windows.panelExpanded.toggle()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(windows.panel == nil)
 
             Button("Sunrise & Sunset") {
                 windows.openSun(.sunset)

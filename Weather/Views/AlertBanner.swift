@@ -74,6 +74,8 @@ struct AlertPill: View {
 
 struct AlertDetailView: View {
     let alerts: [WeatherAlert]
+    /// Set when shown as a card in the Mac window rather than a sheet.
+    var onClose: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -98,7 +100,7 @@ struct AlertDetailView: View {
                         Spacer(minLength: 12)
                         Button {
                             Haptics.tap()
-                            dismiss()
+                            if let onClose { onClose() } else { dismiss() }
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 16, weight: .semibold))

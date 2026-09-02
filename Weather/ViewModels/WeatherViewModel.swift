@@ -93,6 +93,16 @@ final class WeatherViewModel {
             case .extraLarge: .xxLarge
             }
         }
+
+        /// The Mac has no Dynamic Type; the serif faces scale by this instead.
+        var macScale: CGFloat {
+            switch self {
+            case .system, .standard: 1
+            case .small: 0.92
+            case .large: 1.1
+            case .extraLarge: 1.22
+            }
+        }
     }
 
     private let weatherService = WeatherService()
@@ -178,7 +188,16 @@ final class WeatherViewModel {
     // MARK: - Appearance & behavior settings
 
     var textSize: TextSize {
-        didSet { UserDefaults.standard.set(textSize.rawValue, forKey: Self.textSizeKey); CloudSync.push() }
+        didSet {
+            UserDefaults.standard.set(textSize.rawValue, forKey: Self.textSizeKey); CloudSync.push()
+            applyMacTextScale()
+        }
+    }
+
+    private func applyMacTextScale() {
+        #if os(macOS)
+        UIPrefs.shared.textScale = textSize.macScale
+        #endif
     }
 
     var precipUnit: PrecipUnit {
@@ -514,6 +533,7 @@ final class WeatherViewModel {
         Fmt.precipUnit = precipUnit
         Fmt.pressureUnit = pressureUnit
         Haptics.isEnabled = hapticsEnabled
+        applyMacTextScale()
         loadSavedPlaces()
     }
 

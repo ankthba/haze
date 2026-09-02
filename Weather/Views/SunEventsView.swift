@@ -32,6 +32,9 @@ struct SunEventsView: View {
     var initialKind: SunEvent.Kind? = nil
     /// The register the verdicts are written in, from the whimsy setting.
     var voice: Voice = .editorial
+    /// Set when the page is shown as a card in the Mac window rather than a
+    /// presented sheet: closing goes here instead of through `dismiss`.
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: String?
@@ -115,7 +118,7 @@ struct SunEventsView: View {
             HStack {
                 Spacer()
                 Button {
-                    dismiss()
+                    if let onClose { onClose() } else { dismiss() }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 15, weight: .semibold))

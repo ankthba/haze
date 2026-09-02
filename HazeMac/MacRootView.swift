@@ -15,6 +15,7 @@ struct MacRootView: View {
     @Bindable var windows: MacWindows
 
     @State private var summaries = PlaceSummaries()
+    @State private var cards = CardPresenter()
     @Environment(\.scenePhase) private var scenePhase
 
     static let sidebarWidth: CGFloat = 272
@@ -40,21 +41,59 @@ struct MacRootView: View {
                               sunrise: viewModel.bundle?.today?.sunrise,
                               sunset: viewModel.bundle?.today?.sunset)
 
-                HStack(spacing: 0) {
-                    if windows.sidebarVisible {
-                        MacSidebar(viewModel: viewModel, summaries: summaries, windows: windows)
-                            .frame(width: Self.sidebarWidth)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
+                GeometryReader { geo in
+                    // Every column gets an explicit width from the window, so
+                    // the three of them can never disagree about who owns the
+                    // space, and opening a panel animates as a plain resize.
+                    // A panel that would leave the page thinner than a phone
+                    // simply takes the page instead.
+                    let sidebar: CGFloat = windows.sidebarVisible ? Self.sidebarWidth : 0
+                    let pageWidth = geo.size.width - sidebar
+                    let canCollapse = pageWidth - MacPanel.width >= 420
+                    let expanded = windows.panel != nil && (windows.panelExpanded || !canCollapse)
+                    let panelWidth: CGFloat = windows.panel == nil ? 0
+                        : (expanded ? pageWidth : MacPanel.width)
+                    let detailWidth = pageWidth - panelWidth
+
+                    HStack(spacing: 0) {
+                        if windows.sidebarVisible {
+                            MacSidebar(viewModel: viewModel, summaries: summaries, windows: windows)
+                                .frame(width: Self.sidebarWidth)
+                                .transition(.move(edge: .leading).combined(with: .opacity))
+                        }
+                        if !expanded {
+                            MacDetail(viewModel: viewModel, windows: windows)
+                                .frame(width: detailWidth)
+                                .clipped()
+                                .transition(.opacity)
+                        }
+                        if let panel = windows.panel {
+                            MacPanel(viewModel: viewModel, windows: windows, panel: panel,
+                                     isExpanded: expanded, canCollapse: canCollapse)
+                                .frame(width: panelWidth)
+                                .clipped()
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
                     }
-                    MacDetail(viewModel: viewModel, windows: windows)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .leading)
+                    .animation(UIPrefs.shared.reduceMotion ? nil
+                               : .spring(response: 0.4, dampingFraction: 0.9),
+                               value: windows.sidebarVisible)
+                    .animation(UIPrefs.shared.reduceMotion ? nil
+                               : .spring(response: 0.4, dampingFraction: 0.9),
+                               value: windows.panel)
+                    .animation(UIPrefs.shared.reduceMotion ? nil
+                               : .spring(response: 0.4, dampingFraction: 0.9),
+                               value: expanded)
                 }
-                .animation(UIPrefs.shared.reduceMotion ? nil
-                           : .spring(response: 0.4, dampingFraction: 0.9),
-                           value: windows.sidebarVisible)
+                // The columns own the top row themselves (the traffic lights
+                // sit on it); nothing is held back for a title bar.
+                .ignoresSafeArea(.container, edges: .top)
             } else {
                 intro
             }
         }
+        .background(WindowChrome())
         .colorScheme(.dark)
         // The whole app is white type on a sky: sheets, menus, and the
         // Settings window all keep to the dark appearance so the chrome agrees.
@@ -100,15 +139,19 @@ struct MacRootView: View {
         .onChange(of: viewModel.temperatureUnit) {
             Task { await summaries.refresh(places: viewModel.savedPlaces, units: units, force: true) }
         }
-        .sheet(isPresented: $windows.showSunEvents) {
+        .hazeSheet(isPresented: $windows.showSunEvents) { close in
             if let bundle = viewModel.bundle {
                 SunEventsView(bundle: bundle, unit: viewModel.temperatureUnit,
-                              initialKind: windows.sunEventsKind, voice: viewModel.voice)
+                              initialKind: windows.sunEventsKind, voice: viewModel.voice,
+                              onClose: close)
             }
         }
-        .sheet(isPresented: $windows.showAlerts) {
-            AlertDetailView(alerts: viewModel.bundle?.alerts ?? [])
+        .hazeSheet(isPresented: $windows.showAlerts) { close in
+            AlertDetailView(alerts: viewModel.bundle?.alerts ?? [], onClose: close)
         }
+        // The cards themselves, over a blur of the whole window.
+        .overlay { MacCardOverlay(presenter: cards) }
+        .environment(\.cardPresenter, cards)
     }
 
     private var intro: some View {

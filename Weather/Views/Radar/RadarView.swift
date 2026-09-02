@@ -16,6 +16,12 @@ struct RadarView: View {
     let timezone: TimeZone
     let accent: Color
     let isDay: Bool
+    /// Set when the radar lives in a panel rather than a presented cover:
+    /// closing goes here instead of through `dismiss`.
+    var onClose: (() -> Void)? = nil
+    /// The panel's grow-and-shrink control, drawn beside the close button.
+    var onToggleExpand: (() -> Void)? = nil
+    var isExpanded = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -126,7 +132,7 @@ struct RadarView: View {
                 if !frames.isEmpty { controls }
             }
             .padding(.horizontal, 22)
-            .padding(.top, 8)
+            .padding(.top, Platform.isMac ? 7 : 8)
             .padding(.bottom, 12)
         }
         .colorScheme(.dark)
@@ -166,9 +172,24 @@ struct RadarView: View {
                 .accessibilityLabel("Reset zoom")
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
+            if let onToggleExpand {
+                Button {
+                    Haptics.tap()
+                    onToggleExpand()
+                } label: {
+                    Image(systemName: isExpanded
+                          ? "arrow.down.right.and.arrow.up.left"
+                          : "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(CardButtonStyle())
+                .help(isExpanded ? "Back to a column" : "Fill the page")
+                .accessibilityLabel(isExpanded ? "Shrink radar" : "Expand radar")
+            }
             Button {
                 Haptics.tap()
-                dismiss()
+                if let onClose { onClose() } else { dismiss() }
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 16, weight: .semibold))

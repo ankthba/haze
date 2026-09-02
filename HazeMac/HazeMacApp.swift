@@ -3,10 +3,10 @@
 //  HazeMac
 //
 //  Haze for the Mac. The same forecast, models, cards, sky, and glass as the
-//  iPhone app, arranged for a window: a locations column beside the page, the
-//  radar in a window of its own, Settings under ⌘, and, because it is a Mac,
-//  the temperature in the menu bar. No system chrome: the sky runs edge to
-//  edge and the controls are the app's own.
+//  iPhone app, arranged for one window: a locations column, the page, and a
+//  panel beside it for Settings and the radar. No system chrome: the sky runs
+//  edge to edge and the controls are the app's own. And, because it is a Mac,
+//  the temperature sits in the menu bar.
 //
 
 import SwiftUI
@@ -28,25 +28,13 @@ struct HazeMacApp: App {
     var body: some Scene {
         WindowGroup(id: MacWindows.mainWindowID) {
             MacRootView(viewModel: viewModel, windows: windows)
-                .frame(minWidth: 860, minHeight: 600)
+                .frame(minWidth: 900, minHeight: 620)
         }
-        .defaultSize(width: 1180, height: 780)
+        .defaultSize(width: 1240, height: 800)
         .windowStyle(.hiddenTitleBar)
         .commands {
             MacCommands(viewModel: viewModel, windows: windows)
         }
-
-        Window("Radar", id: MacWindows.radarWindowID) {
-            MacRadarWindow(viewModel: viewModel)
-        }
-        .defaultSize(width: 920, height: 660)
-        .windowStyle(.hiddenTitleBar)
-
-        Settings {
-            MacSettingsWindow(viewModel: viewModel)
-        }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
 
         MenuBarExtra(isInserted: $showsMenuBar) {
             MenuBarPanel(viewModel: viewModel)

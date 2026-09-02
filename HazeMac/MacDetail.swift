@@ -16,9 +16,11 @@ struct MacDetail: View {
     @Bindable var viewModel: WeatherViewModel
     @Bindable var windows: MacWindows
 
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
     @State private var selectedDay: DayForecast?
+
+    /// The floating controls sit level with the traffic lights, which the
+    /// window's empty unified title bar centres 26pt from the top.
+    static let titleRowTopPadding: CGFloat = 7
 
     private var alerts: [WeatherAlert] { viewModel.bundle?.alerts ?? [] }
 
@@ -54,11 +56,12 @@ struct MacDetail: View {
         }
         .overlay(alignment: .top) { topBar }
         .navigationTitle(viewModel.bundle?.place.name ?? "Haze")
-        .sheet(item: $selectedDay) { day in
+        .hazeSheet(item: $selectedDay) { day, close in
             if let bundle = viewModel.bundle {
                 DayDetailView(day: day, bundle: bundle,
                               unit: viewModel.temperatureUnit,
-                              speedUnit: viewModel.speedUnit)
+                              speedUnit: viewModel.speedUnit,
+                              onClose: close)
             }
         }
     }
@@ -90,7 +93,7 @@ struct MacDetail: View {
 
             Button {
                 Haptics.tap()
-                openWindow(id: MacWindows.radarWindowID)
+                windows.toggle(.radar)
             } label: {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 18, weight: .semibold))
@@ -103,7 +106,7 @@ struct MacDetail: View {
 
             Button {
                 Haptics.tap()
-                openSettings()
+                windows.toggle(.settings)
             } label: {
                 Image(systemName: "thermometer.variable.and.figure")
                     .font(.system(size: 18, weight: .semibold))
@@ -114,8 +117,11 @@ struct MacDetail: View {
             .accessibilityLabel("Settings")
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 22)
-        .padding(.top, 12)
+        // With the column folded away the traffic lights sit on this row,
+        // so the first button steps clear of them.
+        .padding(.leading, windows.sidebarVisible ? 22 : 86)
+        .padding(.trailing, 22)
+        .padding(.top, Self.titleRowTopPadding)
     }
 }
 
@@ -127,8 +133,6 @@ struct MacWeatherPage: View {
     @Bindable var windows: MacWindows
     @Binding var selectedDay: DayForecast?
 
-    @Environment(\.openWindow) private var openWindow
-
     /// Narrower than this and the spread folds into one column.
     private static let spreadMinimumWidth: CGFloat = 900
     private static let heroWidth: CGFloat = 400
@@ -139,7 +143,7 @@ struct MacWeatherPage: View {
     private var rainLikelyToday: Bool { viewModel.rainLikelyToday }
 
     /// Height of the floating controls' row, kept clear at the top of the page.
-    static let topInset: CGFloat = 62
+    static let topInset: CGFloat = 56
 
     var body: some View {
         GeometryReader { geo in
@@ -276,7 +280,7 @@ struct MacWeatherPage: View {
                 RadarPreviewCard(place: bundle.place,
                                  accent: condition.accent,
                                  isDay: bundle.current.isDay) {
-                    openWindow(id: MacWindows.radarWindowID)
+                    windows.panel = .radar
                 }
             }
         case .details:

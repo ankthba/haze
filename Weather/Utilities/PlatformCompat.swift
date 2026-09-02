@@ -18,10 +18,9 @@ enum Platform {
     static let isMac = false
     #endif
 
-    /// Room to leave above a page's first line. On the iPhone it clears the
-    /// status bar and the floating controls; a Mac sheet or window has its own
-    /// title bar, so only a breath is needed.
-    static var sheetTopInset: CGFloat { isMac ? 12 : 44 }
+    /// Room to leave above a page's first line, clear of the floating close
+    /// button (and, on the iPhone, the status bar).
+    static var sheetTopInset: CGFloat { 44 }
 
     /// Whether the Mac app shows the temperature in the menu bar.
     static let menuBarKey = "mac_menu_bar_enabled"
@@ -70,6 +69,28 @@ extension View {
         #endif
     }
 
+    /// The app's own switch on the Mac; the system's white-tinted one on the
+    /// iPhone, where it already belongs.
+    @ViewBuilder
+    func hazeToggleStyle() -> some View {
+        #if os(macOS)
+        self.toggleStyle(HazeToggleStyle())
+        #else
+        self
+        #endif
+    }
+
+    /// `containerRelativeFrame(.horizontal)` on the iPhone; on the Mac that
+    /// measures the window, not the column, so a full-width frame stands in.
+    @ViewBuilder
+    func pinnedToContainerWidth() -> some View {
+        #if os(macOS)
+        self.frame(maxWidth: .infinity)
+        #else
+        self.containerRelativeFrame(.horizontal)
+        #endif
+    }
+
     /// A quiet lift under the pointer, so a row that opens something says so
     /// before it's clicked. Nothing on touch platforms, where hover doesn't exist.
     func hoverHighlight(cornerRadius: CGFloat = 12, bleed: CGFloat = 10,
@@ -109,6 +130,113 @@ extension CLAuthorizationStatus {
         self == .authorizedAlways
         #else
         self == .authorizedWhenInUse || self == .authorizedAlways
+        #endif
+    }
+}
+
+// MARK: - Sheets
+
+#if os(macOS)
+/// The Mac shows the iPhone's sheets as cards in the window, over a blur of
+/// the page, rather than as system sheets that dim everything behind them.
+/// Whoever wants to show one hands it here; the window root draws it.
+@MainActor
+@Observable
+final class CardPresenter {
+    struct Card: Identifiable {
+        let id = UUID()
+        let content: AnyView
+        /// Clears the presenting view's own state, which in turn clears the card.
+        let onClose: () -> Void
+    }
+
+    private(set) var card: Card?
+
+    func present<Content: View>(_ content: Content, onClose: @escaping () -> Void) {
+        card = Card(content: AnyView(content), onClose: onClose)
+    }
+
+    /// Called when the card's owner has let go of it.
+    func clear() { card = nil }
+
+    /// The backdrop was clicked, or Escape pressed: ask the owner to let go.
+    func dismissCurrent() { card?.onClose() }
+}
+
+private struct CardPresenterKey: EnvironmentKey {
+    static let defaultValue: CardPresenter? = nil
+}
+
+extension EnvironmentValues {
+    var cardPresenter: CardPresenter? {
+        get { self[CardPresenterKey.self] }
+        set { self[CardPresenterKey.self] = newValue }
+    }
+}
+#endif
+
+extension View {
+    /// A sheet on the iPhone; a card over the blurred window on the Mac. The
+    /// content gets a `close` to call from its own close button.
+    func hazeSheet<Item: Identifiable, Page: View>(
+        item: Binding<Item?>,
+        @ViewBuilder content: @escaping (Item, _ close: @escaping () -> Void) -> Page
+    ) -> some View {
+        modifier(HazeItemSheet(item: item, content: content))
+    }
+
+    func hazeSheet<Page: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping (_ close: @escaping () -> Void) -> Page
+    ) -> some View {
+        modifier(HazeBoolSheet(isPresented: isPresented, content: content))
+    }
+}
+
+private struct HazeItemSheet<Item: Identifiable, Page: View>: ViewModifier {
+    @Binding var item: Item?
+    let content: (Item, _ close: @escaping () -> Void) -> Page
+    #if os(macOS)
+    @Environment(\.cardPresenter) private var presenter
+    #endif
+
+    func body(content base: Content) -> some View {
+        #if os(macOS)
+        base.onChange(of: item?.id) {
+            if let item {
+                presenter?.present(content(item) { self.item = nil }) { self.item = nil }
+            } else {
+                presenter?.clear()
+            }
+        }
+        #else
+        base.sheet(item: $item) { item in
+            content(item) { self.item = nil }
+        }
+        #endif
+    }
+}
+
+private struct HazeBoolSheet<Page: View>: ViewModifier {
+    @Binding var isPresented: Bool
+    let content: (_ close: @escaping () -> Void) -> Page
+    #if os(macOS)
+    @Environment(\.cardPresenter) private var presenter
+    #endif
+
+    func body(content base: Content) -> some View {
+        #if os(macOS)
+        base.onChange(of: isPresented) {
+            if isPresented {
+                presenter?.present(content { isPresented = false }) { isPresented = false }
+            } else {
+                presenter?.clear()
+            }
+        }
+        #else
+        base.sheet(isPresented: $isPresented) {
+            content { isPresented = false }
+        }
         #endif
     }
 }

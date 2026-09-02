@@ -21,8 +21,9 @@ struct MacSidebar: View {
     @State private var searchTask: Task<Void, Never>?
     @FocusState private var searchFocused: Bool
 
-    /// Room for the window's traffic lights, which sit over this column.
-    private static let titleBarHeight: CGFloat = 40
+    /// The traffic lights sit on this column's top row, inset by the window's
+    /// empty title bar; the search field shares the row with them.
+    private static let trafficLightsWidth: CGFloat = 86
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
     private var showsResults: Bool { trimmedQuery.count >= 2 }
@@ -34,11 +35,11 @@ struct MacSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: Self.titleBarHeight)
-
             searchField
-                .padding(.horizontal, 16)
-                .padding(.bottom, 14)
+                .padding(.leading, Self.trafficLightsWidth)
+                .padding(.trailing, 14)
+                .padding(.top, MacDetail.titleRowTopPadding)
+                .padding(.bottom, 16)
 
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -55,9 +56,7 @@ struct MacSidebar: View {
             }
             .scrollIndicators(.hidden)
         }
-        // A breath darker than the page, so the column reads as the margin
-        // of the spread; the hairline is the fold.
-        .background(Color.black.opacity(0.10))
+        // The hairline alone is the fold; the column is the same page.
         .overlay(alignment: .trailing) {
             Rectangle().fill(.white.opacity(0.12)).frame(width: 0.6)
         }
@@ -76,7 +75,7 @@ struct MacSidebar: View {
                 .foregroundStyle(.white.opacity(0.55))
 
             TextField("", text: $query,
-                      prompt: Text("Search for a city or airport")
+                      prompt: Text("Search")
                         .foregroundStyle(.white.opacity(0.45)))
                 .textFieldStyle(.plain)
                 .font(.serif(.subheadline))
@@ -102,9 +101,10 @@ struct MacSidebar: View {
             }
         }
         .padding(.horizontal, 13)
-        .padding(.vertical, 9)
+        .frame(height: 38)
         .background(GlassSurface(shape: Capsule(), frost: 0.18, blurRadius: 14))
         .clipShape(Capsule())
+        .accessibilityLabel("Search for a city or airport")
     }
 
     // MARK: - Rows
