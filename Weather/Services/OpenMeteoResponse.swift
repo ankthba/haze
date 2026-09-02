@@ -10,6 +10,9 @@ import Foundation
 struct ForecastResponse: Decodable {
     let timezone: String
     let utcOffsetSeconds: Int
+    /// Metres above sea level at the grid cell; the UV model adds a little
+    /// per kilometre of thinner air.
+    let elevation: Double?
     let current: Current
     // `var`: the NBM overlay splices into these — see NBMOverlay.swift.
     var hourly: Hourly
@@ -21,6 +24,7 @@ struct ForecastResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case timezone
         case utcOffsetSeconds = "utc_offset_seconds"
+        case elevation
         case current, hourly, daily
         case minutely15 = "minutely_15"
     }
@@ -72,7 +76,6 @@ struct ForecastResponse: Decodable {
         let weatherCode: [Int]
         var windSpeed: [Double]
         var windDirection: [Double]
-        let uvIndex: [Double]
         let isDay: [Int]
         /// Optional: these joined the request later, and absence must not
         /// fail the whole decode.
@@ -92,7 +95,6 @@ struct ForecastResponse: Decodable {
             case weatherCode = "weather_code"
             case windSpeed = "wind_speed_10m"
             case windDirection = "wind_direction_10m"
-            case uvIndex = "uv_index"
             case isDay = "is_day"
             case dewPoint = "dew_point_2m"
             case visibility
@@ -113,7 +115,6 @@ struct ForecastResponse: Decodable {
         var apparentMin: [Double]
         let sunrise: [String]
         let sunset: [String]
-        let uvIndexMax: [Double]
         let precipitationSum: [Double]
         var precipitationProbabilityMax: [Int]
         var windSpeedMax: [Double]
@@ -130,7 +131,6 @@ struct ForecastResponse: Decodable {
             case apparentMax = "apparent_temperature_max"
             case apparentMin = "apparent_temperature_min"
             case sunrise, sunset
-            case uvIndexMax = "uv_index_max"
             case precipitationSum = "precipitation_sum"
             case precipitationProbabilityMax = "precipitation_probability_max"
             case windSpeedMax = "wind_speed_10m_max"

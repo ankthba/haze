@@ -101,7 +101,7 @@ nonisolated struct WeatherService {
             .init(name: "hourly", value: [
                 "temperature_2m", "relative_humidity_2m", "apparent_temperature",
                 "precipitation_probability", "precipitation", "weather_code",
-                "wind_speed_10m", "wind_direction_10m", "uv_index", "is_day",
+                "wind_speed_10m", "wind_direction_10m", "is_day",
                 "dew_point_2m", "visibility",
                 // Layered cloud cover feeds the sunrise/sunset quality model:
                 // high/mid clouds are the canvas the light paints, low clouds
@@ -111,7 +111,7 @@ nonisolated struct WeatherService {
             .init(name: "daily", value: [
                 "weather_code", "temperature_2m_max", "temperature_2m_min",
                 "apparent_temperature_max", "apparent_temperature_min",
-                "sunrise", "sunset", "uv_index_max", "precipitation_sum",
+                "sunrise", "sunset", "precipitation_sum",
                 "precipitation_probability_max", "wind_speed_10m_max",
                 "wind_gusts_10m_max", "wind_direction_10m_dominant",
                 "snowfall_sum"
@@ -380,12 +380,11 @@ nonisolated struct WeatherService {
         // Current
         let c = raw.current
         let currentDate = parser.date(from: c.time) ?? Date()
-        // Parsed once and reused by both the UV lookup and the hourly series —
-        // 240 date parses, not 480.
+        // Parsed once and reused by both the current-hour lookup and the
+        // hourly series: 240 date parses, not 480.
         let hourlyDates = raw.hourly.time.map { parser.date(from: $0) }
-        // Open-Meteo's hourly arrays begin at local midnight, so `uvIndex.first`
-        // is the overnight value (always 0). Read the UV from the hourly sample
-        // closest to the current time instead.
+        // The hourly sample closest to the current time stands in for the
+        // "current" variables Open-Meteo doesn't offer.
         let nearestHourIndex: Int? = {
             var best: (index: Int, delta: TimeInterval)?
             for (i, date) in hourlyDates.enumerated() {
@@ -395,8 +394,19 @@ nonisolated struct WeatherService {
             }
             return best?.index
         }()
-        let currentUV = nearestHourIndex.flatMap { raw.hourly.uvIndex[safe: $0] }
-            ?? raw.hourly.uvIndex.first
+        // The UV index is computed, not fetched (see UVIndex.swift): the sun's
+        // height at this place and moment, under the cloud layers of the
+        // nearest forecast hour.
+        let elevation = raw.elevation ?? 0
+        let h = raw.hourly
+        func uvIndex(at date: Date, hour: Int?) -> Double {
+            UVIndex.value(at: date, latitude: place.latitude, longitude: place.longitude,
+                          elevation: elevation,
+                          cloudLow: hour.flatMap { h.cloudCoverLow?[safe: $0] },
+                          cloudMid: hour.flatMap { h.cloudCoverMid?[safe: $0] },
+                          cloudHigh: hour.flatMap { h.cloudCoverHigh?[safe: $0] })
+        }
+        let currentUV = uvIndex(at: currentDate, hour: nearestHourIndex)
         // Dew point and visibility have no "current" variable; the nearest
         // hourly sample is the honest stand-in.
         let currentDew = nearestHourIndex.flatMap { raw.hourly.dewPoint?[safe: $0] }
@@ -441,11 +451,15 @@ nonisolated struct WeatherService {
         }()
 
         // Hourly
-        let h = raw.hourly
         var hours: [HourPoint] = []
         hours.reserveCapacity(hourlyDates.count)
+        // Each day's strongest hour, for the daily UV figure.
+        var uvPeakByDay: [Date: Double] = [:]
         for i in h.time.indices {
             guard let date = hourlyDates[safe: i] ?? nil, date >= todayStart else { continue }
+            let uv = uvIndex(at: date, hour: i)
+            let day = cal.startOfDay(for: date)
+            uvPeakByDay[day] = max(uvPeakByDay[day] ?? 0, uv)
             var point = HourPoint(
                 date: date,
                 temperature: h.temperature[safe: i] ?? 0,
@@ -457,7 +471,7 @@ nonisolated struct WeatherService {
                 windSpeed: h.windSpeed[safe: i] ?? 0,
                 windDirection: h.windDirection[safe: i] ?? 0,
                 humidity: h.humidity[safe: i] ?? 0,
-                uvIndex: h.uvIndex[safe: i] ?? 0
+                uvIndex: uv
             )
             point.cloudCoverLow = h.cloudCoverLow?[safe: i]
             point.cloudCoverMid = h.cloudCoverMid?[safe: i]
@@ -488,7 +502,7 @@ nonisolated struct WeatherService {
                 apparentMin: d.apparentMin[safe: i] ?? 0,
                 sunrise: parser.date(from: d.sunrise[safe: i] ?? ""),
                 sunset: parser.date(from: d.sunset[safe: i] ?? ""),
-                uvIndexMax: d.uvIndexMax[safe: i] ?? 0,
+                uvIndexMax: uvPeakByDay[cal.startOfDay(for: date)] ?? 0,
                 precipitationSum: d.precipitationSum[safe: i] ?? 0,
                 precipitationProbabilityMax: Double(d.precipitationProbabilityMax[safe: i] ?? 0),
                 windSpeedMax: d.windSpeedMax[safe: i] ?? 0,

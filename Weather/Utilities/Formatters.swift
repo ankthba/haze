@@ -188,8 +188,15 @@ enum Fmt {
         return dirs[(index + 16) % 16]
     }
 
+    /// The index as people read it: a whole number, 0 to 11+.
+    static func uv(_ value: Double) -> String {
+        String(Int(max(0, value).rounded()))
+    }
+
+    /// The WHO band for the index as displayed, so a 2.6 that prints as "3"
+    /// reads "Moderate", not "Low".
     static func uvLabel(_ value: Double) -> String {
-        switch value {
+        switch max(0, value).rounded() {
         case ..<3: return "Low"
         case 3..<6: return "Moderate"
         case 6..<8: return "High"

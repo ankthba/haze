@@ -2,8 +2,8 @@
 //  Astronomy.swift
 //  Weather
 //
-//  Locally computed sky facts — moon phase and golden hour. No network:
-//  the moon doesn't need an API.
+//  Locally computed sky facts: moon phase, golden hour, and where the sun
+//  sits. No network: the moon doesn't need an API, and neither does the sun.
 //
 
 import Foundation
@@ -83,6 +83,19 @@ nonisolated enum SunPosition {
     /// NOAA-style formulas, good to well under a degree; a compass label
     /// can't resolve finer anyway.
     static func azimuth(date: Date, latitude: Double, longitude: Double) -> Double {
+        horizontal(date: date, latitude: latitude, longitude: longitude).azimuth
+    }
+
+    /// The sun's height above the horizon in degrees, negative once it has
+    /// set. Geometric, without refraction: the UV model that reads it cares
+    /// about the sun's path length through the ozone layer, not the bent
+    /// image at the horizon.
+    static func elevation(date: Date, latitude: Double, longitude: Double) -> Double {
+        horizontal(date: date, latitude: latitude, longitude: longitude).elevation
+    }
+
+    private static func horizontal(date: Date, latitude: Double,
+                                   longitude: Double) -> (azimuth: Double, elevation: Double) {
         let rad = Double.pi / 180
 
         // Days from the J2000 epoch.
@@ -108,7 +121,10 @@ nonisolated enum SunPosition {
         let phi = latitude * rad
         let azimuthFromSouth = atan2(sin(hourAngle),
                                      cos(hourAngle) * sin(phi) - tan(declination) * cos(phi))
-        return normalize(azimuthFromSouth / rad + 180)
+        let sinElevation = sin(phi) * sin(declination)
+            + cos(phi) * cos(declination) * cos(hourAngle)
+        return (normalize(azimuthFromSouth / rad + 180),
+                asin(max(-1, min(1, sinElevation))) / rad)
     }
 
     private static func normalize(_ degrees: Double) -> Double {

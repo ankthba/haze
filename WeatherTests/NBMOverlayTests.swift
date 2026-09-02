@@ -41,7 +41,6 @@ struct NBMOverlayTests {
             "weather_code": [1, 2, 3],
             "wind_speed_10m": [4.0, 5.0, 6.0],
             "wind_direction_10m": [90.0, 100.0, 110.0],
-            "uv_index": [0.0, 1.0, 2.0],
             "is_day": [0, 0, 0],
             "dew_point_2m": [60.0, 61.0, 62.0]
           },
@@ -54,7 +53,6 @@ struct NBMOverlayTests {
             "apparent_temperature_min": [68.0, 74.0],
             "sunrise": ["2026-08-27T06:40", "2026-08-28T06:41"],
             "sunset": ["2026-08-27T19:50", "2026-08-28T19:49"],
-            "uv_index_max": [7.0, 8.0],
             "precipitation_sum": [0.0, 0.5],
             "precipitation_probability_max": [15, 60],
             "wind_speed_10m_max": [12.0, 14.0],
@@ -166,12 +164,10 @@ struct NBMOverlayTests {
         """)
         base.applyNBM(nbm)
 
-        // Codes, UV, precipitation amounts and sun times are best-match only.
+        // Codes, precipitation amounts and sun times are best-match only.
         #expect(base.hourly.weatherCode == [1, 2, 3])
-        #expect(base.hourly.uvIndex == [0.0, 1.0, 2.0])
         #expect(base.hourly.precipitation == [0.0, 0.1, 0.2])
         #expect(base.daily.weatherCode == [3, 61])
-        #expect(base.daily.uvIndexMax == [7.0, 8.0])
         #expect(base.daily.precipitationSum == [0.0, 0.5])
         #expect(base.daily.sunrise == ["2026-08-27T06:40", "2026-08-28T06:41"])
     }

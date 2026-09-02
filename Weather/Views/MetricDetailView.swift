@@ -26,6 +26,20 @@ struct MetricKind: Identifiable {
     /// Renders a value as a display string (e.g. "62%", "8 mph", "71°").
     let format: (Double) -> String
     let style: Style
+    /// The reading for "now", when the current conditions carry one; the
+    /// first charted hour stands in otherwise.
+    var current: ((CurrentWeather) -> Double?)? = nil
+    /// A word under the headline number ("Moderate" for a UV of 4).
+    var subtitle: ((Double) -> String)? = nil
+    /// A fixed lower edge for the chart, for quantities that start at zero
+    /// and should never look like they dip below it.
+    var floor: Double? = nil
+    /// The least the chart's top will be, so a quiet day reads as quiet
+    /// rather than filling the frame.
+    var minimumCeiling: Double? = nil
+    /// Explicit gridlines, for scales with meaningful thresholds.
+    var axisTicks: [Double]? = nil
+    var interpolation: InterpolationMethod = .catmullRom
 
     static func wind(speedUnit: SpeedUnit) -> MetricKind {
         MetricKind(id: "wind",
@@ -34,7 +48,8 @@ struct MetricKind: Identifiable {
                    accent: Color(hex: 0x7FC4FF),
                    value: { $0.windSpeed },
                    format: { "\(Fmt.speed($0)) \(speedUnit.label)" },
-                   style: .line)
+                   style: .line,
+                   current: { $0.windSpeed })
     }
 
     static func feelsLike(unit: TemperatureUnit) -> MetricKind {
@@ -44,7 +59,8 @@ struct MetricKind: Identifiable {
                    accent: Color(hex: 0xF4A65E),
                    value: { $0.apparentTemperature },
                    format: { Fmt.tempDegree($0) },
-                   style: .line)
+                   style: .line,
+                   current: { $0.apparentTemperature })
     }
 
     static let humidity = MetricKind(
@@ -54,16 +70,26 @@ struct MetricKind: Identifiable {
         accent: Color(hex: 0x6FD3C4),
         value: { $0.humidity },
         format: { Fmt.percent($0) },
-        style: .line)
+        style: .line,
+        current: { $0.humidity })
 
+    /// Charted on the WHO scale: gridlines at the band edges, the floor
+    /// pinned to zero, and the top never below Extreme so a mild day looks
+    /// mild.
     static let uvIndex = MetricKind(
         id: "uvIndex",
         title: "UV Index",
         symbol: "sun.max.trianglebadge.exclamationmark",
         accent: Color(hex: 0xF4D03F),
         value: { $0.uvIndex },
-        format: { Fmt.temp($0) },
-        style: .line)
+        format: { Fmt.uv($0) },
+        style: .line,
+        current: { $0.uvIndex },
+        subtitle: { Fmt.uvLabel($0) },
+        floor: 0,
+        minimumCeiling: 11,
+        axisTicks: [0, 3, 6, 8, 11],
+        interpolation: .monotone)
 
     static func precipitation(unit: TemperatureUnit) -> MetricKind {
         MetricKind(id: "precipitation",
@@ -82,6 +108,7 @@ struct MetricDetailView: View {
     let metric: MetricKind
     let bundle: WeatherBundle
     let unit: TemperatureUnit
+    var voice: Voice = .editorial
 
     @Environment(\.dismiss) private var dismiss
     @State private var selected: HourPoint?
@@ -92,6 +119,14 @@ struct MetricDetailView: View {
     private var hours: [HourPoint] { bundle.upcomingHours }
 
     private var values: [Double] { hours.map(metric.value) }
+
+    /// The headline reading: the live figure where there is one, else the
+    /// first charted hour.
+    private var nowValue: Double? {
+        metric.current?(bundle.current) ?? hours.first.map(metric.value)
+    }
+
+    private var isUV: Bool { metric.id == MetricKind.uvIndex.id }
 
     var body: some View {
         ZStack {
@@ -106,6 +141,9 @@ struct MetricDetailView: View {
                     chartCard
                     if metric.id == "wind" {
                         windDirectionCard
+                    }
+                    if isUV {
+                        sunProtectionCard
                     }
                 }
                 .padding(.horizontal, 16)
@@ -166,11 +204,16 @@ struct MetricDetailView: View {
                 .font(.serif(.title2, italic: true))
                 .foregroundStyle(.white)
 
-            if let first = hours.first {
-                Text(metric.format(metric.value(first)))
+            if let now = nowValue {
+                Text(metric.format(now))
                     .font(.serif(.largeTitle))
                     .foregroundStyle(.white)
                     .padding(.top, 2)
+                if let subtitle = metric.subtitle {
+                    Text(subtitle(now))
+                        .font(.serif(.subheadline, italic: true))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -205,7 +248,7 @@ struct MetricDetailView: View {
                         yStart: .value("Base", domain.lowerBound),
                         yEnd: .value(metric.title, v)
                     )
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(metric.interpolation)
                     .foregroundStyle(
                         LinearGradient(colors: [metric.accent.opacity(0.35),
                                                 metric.accent.opacity(0.02)],
@@ -216,7 +259,7 @@ struct MetricDetailView: View {
                         x: .value("Time", point.date),
                         y: .value(metric.title, v)
                     )
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(metric.interpolation)
                     .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                     .foregroundStyle(
                         LinearGradient(colors: [.white, metric.accent],
@@ -260,14 +303,15 @@ struct MetricDetailView: View {
         }
         .chartYScale(domain: domain)
         .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                AxisGridLine().foregroundStyle(.white.opacity(0.08))
-                AxisValueLabel {
-                    if let v = value.as(Double.self) {
-                        Text(metric.format(v))
-                            .font(.serif(.caption2))
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
+            if let ticks = metric.axisTicks {
+                AxisMarks(position: .leading, values: ticks) { value in
+                    AxisGridLine().foregroundStyle(.white.opacity(0.08))
+                    AxisValueLabel { yAxisLabel(value) }
+                }
+            } else {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                    AxisGridLine().foregroundStyle(.white.opacity(0.08))
+                    AxisValueLabel { yAxisLabel(value) }
                 }
             }
         }
@@ -285,6 +329,15 @@ struct MetricDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private func yAxisLabel(_ value: AxisValue) -> some View {
+        if let v = value.as(Double.self) {
+            Text(metric.format(v))
+                .font(.serif(.caption2))
+                .foregroundStyle(.white.opacity(0.6))
+        }
+    }
+
     /// Y domain padded a little above/below the series so the curve breathes.
     private var domain: ClosedRange<Double> {
         guard let lo = values.min(), let hi = values.max() else { return 0...1 }
@@ -293,6 +346,12 @@ struct MetricDetailView: View {
             // Probabilities sit on a fixed 0–100 scale.
             return 0...100
         case .line:
+            if let floor = metric.floor {
+                // Anchored scales: the floor is the floor, and the top is
+                // whichever is higher, the minimum ceiling or the series.
+                let top = max(metric.minimumCeiling ?? 0, hi * 1.08, floor + 1)
+                return floor...top
+            }
             if lo == hi { return (lo - 1)...(hi + 1) }
             let pad = (hi - lo) * 0.15
             return (lo - pad)...(hi + pad)
@@ -353,28 +412,102 @@ struct MetricDetailView: View {
         }
     }
 
+    // MARK: - Sun protection
+
+    /// The UV sheet's second card: when to cover up, and the WHO scale with
+    /// the current band picked out.
+    private var sunProtectionCard: some View {
+        let outlook = UVOutlook(bundle: bundle)
+        let active = UVOutlook.band(for: outlook.now)
+        return GlassCard {
+            VStack(alignment: .leading, spacing: 18) {
+                CardLabel(systemImage: "sun.max.fill", title: "Sun Protection")
+
+                Text(outlook.protectionLine(timezone: timezone, voice: voice))
+                    .font(.serif(.body))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(spacing: 0) {
+                    ForEach(UVOutlook.bands, id: \.lower) { band in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(band.name)
+                                .font(.serif(.body, weight: .medium))
+                                .frame(width: 88, alignment: .leading)
+                            Text(band.range)
+                                .font(.serif(.caption))
+                                .frame(width: 40, alignment: .leading)
+                            Text(band.advice)
+                                .font(.serif(.caption))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            Spacer(minLength: 0)
+                        }
+                        .foregroundStyle(.white.opacity(band == active ? 1 : 0.5))
+                        .padding(.vertical, 10)
+                        .overlay(alignment: .top) {
+                            Rectangle()
+                                .fill(.white.opacity(0.10))
+                                .frame(height: 0.5)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(band.name), \(band.range), \(band.advice)")
+                        .accessibilityAddTraits(band == active ? .isSelected : [])
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Summary
 
+    @ViewBuilder
     private var summaryRow: some View {
-        HStack(spacing: 0) {
-            if let first = hours.first {
-                stat("Now", metric.value(first))
+        if isUV {
+            uvSummaryRow
+        } else {
+            HStack(spacing: 0) {
+                if let now = nowValue {
+                    stat("Now", now)
+                }
+                if let lo = values.min() { divider; stat("Min", lo) }
+                if let hi = values.max() { divider; stat("Max", hi) }
+                if !values.isEmpty {
+                    divider
+                    stat("Avg", values.reduce(0, +) / Double(values.count))
+                }
             }
-            if let lo = values.min() { divider; stat("Min", lo) }
-            if let hi = values.max() { divider; stat("Max", hi) }
-            if !values.isEmpty {
+        }
+    }
+
+    /// Min and average mean nothing for a quantity that is zero all night;
+    /// the UV row says what it is now and when the charted window peaks.
+    private var uvSummaryRow: some View {
+        HStack(spacing: 0) {
+            if let now = nowValue {
+                stat("Now", now)
+            }
+            // No peak to name when nothing in the window rises (polar night).
+            if let peak = hours.max(by: { metric.value($0) < metric.value($1) }),
+               metric.value(peak) >= 0.5 {
                 divider
-                stat("Avg", values.reduce(0, +) / Double(values.count))
+                stat("Peak", metric.value(peak))
+                divider
+                stat("At", Fmt.hour(peak.date, timezone: timezone))
             }
         }
     }
 
     private func stat(_ label: String, _ value: Double) -> some View {
+        stat(label, metric.format(value))
+    }
+
+    private func stat(_ label: String, _ text: String) -> some View {
         VStack(spacing: 3) {
             Text(label)
                 .font(.serif(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.55))
-            Text(metric.format(value))
+            Text(text)
                 .font(.serif(.title3))
                 .foregroundStyle(.white)
         }

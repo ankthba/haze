@@ -362,6 +362,14 @@ private struct DayMetricsGrid: View {
         return hours.map(\.humidity).reduce(0, +) / Double(hours.count)
     }
 
+    /// "Very High, peaks near 1 PM": the band, and the hour it belongs to.
+    private var uvCaption: String {
+        let band = Fmt.uvLabel(day.uvIndexMax)
+        guard let peak = hours.max(by: { $0.uvIndex < $1.uvIndex }), peak.uvIndex >= 0.5
+        else { return band }
+        return "\(band), peaks near \(Fmt.hour(peak.date, timezone: timezone))"
+    }
+
     /// Length of day from sunrise to sunset, e.g. "13h 24m".
     private var daylight: String? {
         guard let sunrise = day.sunrise, let sunset = day.sunset, sunset > sunrise
@@ -379,7 +387,7 @@ private struct DayMetricsGrid: View {
             row("sun.horizon.fill", "Daylight", daylight ?? "—",
                 caption: "Sunrise to sunset")
             row("sun.max.trianglebadge.exclamationmark", "UV Index",
-                Fmt.temp(day.uvIndexMax), caption: Fmt.uvLabel(day.uvIndexMax))
+                Fmt.uv(day.uvIndexMax), caption: uvCaption)
             row("umbrella.fill", "Precip Chance",
                 Fmt.percent(day.precipitationProbabilityMax), caption: "Peak through the day")
             row("drop.fill", "Precip Total", Fmt.precip(day.precipitationSum, unit: unit))

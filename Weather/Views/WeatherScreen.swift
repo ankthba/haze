@@ -191,7 +191,8 @@ struct WeatherScreen: View {
                            unit: viewModel.temperatureUnit,
                            speedUnit: viewModel.speedUnit,
                            showWindCompass: viewModel.showWindCompass,
-                           showSunCard: viewModel.showSunCard)
+                           showSunCard: viewModel.showSunCard,
+                           voice: viewModel.voice)
         }
     }
 

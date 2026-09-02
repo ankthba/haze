@@ -15,6 +15,7 @@ struct DetailsSection: View {
     let speedUnit: SpeedUnit
     var showWindCompass = true
     var showSunCard = true
+    var voice: Voice = .editorial
 
     @State private var selectedMetric: MetricKind?
 
@@ -47,7 +48,7 @@ struct DetailsSection: View {
 
             // Everything else as its own full-width row.
             VStack(spacing: 0) {
-                let uv = current.uvIndex ?? today?.uvIndexMax ?? 0
+                let uv = UVOutlook(bundle: bundle)
 
                 metricRow("thermometer.medium", "Feels Like",
                           Fmt.temp(current.apparentTemperature), unit: unit.symbol,
@@ -58,8 +59,8 @@ struct DetailsSection: View {
                           caption: "Relative humidity", metric: .humidity)
 
                 metricRow("sun.max.trianglebadge.exclamationmark", "UV Index",
-                          Fmt.temp(uv),
-                          caption: Fmt.uvLabel(uv), metric: .uvIndex)
+                          Fmt.uv(uv.now),
+                          caption: uv.caption(timezone: bundle.timezone), metric: .uvIndex)
 
                 metricRow("drop.fill", "Precipitation",
                           Fmt.precip(current.precipitation, unit: unit),
@@ -93,7 +94,7 @@ struct DetailsSection: View {
             }
         }
         .sheet(item: $selectedMetric) { metric in
-            MetricDetailView(metric: metric, bundle: bundle, unit: unit)
+            MetricDetailView(metric: metric, bundle: bundle, unit: unit, voice: voice)
         }
     }
 
