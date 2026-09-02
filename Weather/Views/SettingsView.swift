@@ -39,13 +39,11 @@ struct SettingsView: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     VStack(spacing: 20) {
-                        if !inPanel {
-                            Text("Settings")
-                                .font(.serif(.largeTitle))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, 4)
-                        }
+                        Text("Settings")
+                            .font(.serif(.largeTitle))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
 
                         textSizeCard
                         #if os(iOS)
@@ -80,7 +78,7 @@ struct SettingsView: View {
                 }
                 .scrollIndicators(.hidden)
                 .safeAreaInset(edge: .top) {
-                    Color.clear.frame(height: inPanel ? 76 : Platform.sheetTopInset)
+                    Color.clear.frame(height: inPanel ? 58 : Platform.sheetTopInset)
                 }
                 // Screenshot/automation hook, a sibling of -openSettings.
                 .onAppear {
@@ -127,17 +125,11 @@ struct SettingsView: View {
         }
     }
 
-    /// The radar's header, for the page's turn in the panel: what this is on
-    /// the left, the panel's controls on the right, on the window's top row.
+    /// The panel's controls, on the window's own top row; the page's title
+    /// stays with the page below.
     private var panelHeader: some View {
         VStack {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    CardLabel(systemImage: "thermometer.variable.and.figure", title: "Preferences")
-                    Text("Settings")
-                        .font(.serif(size: 27))
-                        .foregroundStyle(.white)
-                }
                 Spacer(minLength: 12)
                 if let onToggleExpand {
                     Button {

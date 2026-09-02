@@ -148,15 +148,19 @@ struct RadarView: View {
 
     // MARK: - Chrome
 
+    /// In a panel the place is already named beside it, so the header is
+    /// only the controls, on the window's own top row.
     private var header: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                CardLabel(systemImage: "dot.radiowaves.left.and.right", title: "Radar")
-                Text(place.name)
-                    .font(.serif(size: 27))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+            if onClose == nil {
+                VStack(alignment: .leading, spacing: 2) {
+                    CardLabel(systemImage: "dot.radiowaves.left.and.right", title: "Radar")
+                    Text(place.name)
+                        .font(.serif(size: 27))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
             }
             Spacer(minLength: 12)
             if cameraMoved {
