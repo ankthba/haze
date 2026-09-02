@@ -9,7 +9,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct OnboardingView: View {
     @Bindable var viewModel: WeatherViewModel
@@ -63,6 +62,7 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.4), value: prefs.increaseContrast)
 
+            #if os(iOS)
             TabView(selection: $page) {
                 wordmarkPage.tag(0)
                 typePage.tag(1)
@@ -73,10 +73,24 @@ struct OnboardingView: View {
                 locationPage.tag(6)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            #else
+            // No paging TabView on the Mac: each page slides in from the
+            // trailing edge under the Continue button (or the Return key).
+            ZStack {
+                currentPage
+                    .id(page)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)))
+            }
+            .animation(UIPrefs.shared.reduceMotion ? nil
+                       : .spring(response: 0.5, dampingFraction: 0.85), value: page)
+            #endif
 
             VStack {
                 Spacer()
                 controls
+                    .frame(maxWidth: 440)
             }
             .padding(.horizontal, 28)
             .padding(.bottom, 24)
@@ -113,10 +127,7 @@ struct OnboardingView: View {
                 for (step, intensity) in [0.35, 0.6, 0.95].enumerated() {
                     guard !Task.isCancelled, page == 2 else { return }
                     withAnimation(.easeOut(duration: 0.22)) { radarStep = step }
-                    if Haptics.isEnabled {
-                        UIImpactFeedbackGenerator(style: step == 2 ? .light : .soft)
-                            .impactOccurred(intensity: intensity)
-                    }
+                    Haptics.impact(step == 2 ? .light : .soft, intensity: intensity)
                     try? await Task.sleep(for: .milliseconds(400))
                 }
                 guard !Task.isCancelled, page == 2 else { return }
@@ -142,10 +153,7 @@ struct OnboardingView: View {
                 guard page == 1 else { return }
                 let progress = Double(value - start) / Double(end - start)
                 withAnimation(.easeInOut(duration: 0.3)) { specimenDegrees = value }
-                if Haptics.isEnabled {
-                    UIImpactFeedbackGenerator(style: .light)
-                        .impactOccurred(intensity: 0.5 + 0.4 * progress)
-                }
+                Haptics.impact(.light, intensity: 0.5 + 0.4 * progress)
                 // A leisurely cadence that stretches as the reading settles.
                 let delay = 200 + Int(pow(progress, 2.0) * 280)
                 try? await Task.sleep(for: .milliseconds(delay))
@@ -156,6 +164,20 @@ struct OnboardingView: View {
     }
 
     // MARK: - Pages
+
+    /// The page for the current index, for platforms without a paging TabView.
+    @ViewBuilder
+    private var currentPage: some View {
+        switch page {
+        case 0: wordmarkPage
+        case 1: typePage
+        case 2: radarPage
+        case 3: unitsPage
+        case 4: comfortPage
+        case 5: voicePage
+        default: locationPage
+        }
+    }
 
     private var wordmarkPage: some View {
         pageLayout {
@@ -336,6 +358,8 @@ struct OnboardingView: View {
     }
 
     /// Shared page scaffold: centered content, breathing room for the controls.
+    /// Capped at a column's width so a wide Mac window doesn't stretch the
+    /// pickers across the whole sky.
     private func pageLayout(@ViewBuilder content: () -> some View) -> some View {
         VStack(spacing: 12) {
             Spacer()
@@ -343,6 +367,7 @@ struct OnboardingView: View {
             Spacer()
             Spacer()
         }
+        .frame(maxWidth: 440)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 36)
     }
@@ -393,6 +418,7 @@ struct OnboardingView: View {
                         page += 1
                     }
                 }
+                .keyboardShortcut(.defaultAction)
             } else {
                 capsuleButton(requestingLocation ? "One moment…" : "Use My Location",
                               prominent: true) {
@@ -404,6 +430,7 @@ struct OnboardingView: View {
                         onFinish()
                     }
                 }
+                .keyboardShortcut(.defaultAction)
                 capsuleButton("Choose a City", prominent: false) {
                     Haptics.arrival()
                     onChooseCity()

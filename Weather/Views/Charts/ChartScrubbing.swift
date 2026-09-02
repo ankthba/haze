@@ -9,7 +9,11 @@
 
 import SwiftUI
 import Charts
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 /// The little floating readout shown above the scrub line, finished in the same
 /// frosted glass as the app's buttons and panels. (An earlier build used a solid
@@ -90,6 +94,9 @@ private struct ChartScrubModifier: ViewModifier {
     }
 }
 
+
+#if canImport(UIKit)
+
 /// A UIKit pan recognizer that only *begins* on mostly-horizontal drags. Vertical
 /// drags never start it, so the touch passes straight through to the enclosing
 /// ScrollView and the page scrolls normally — the reliable way to mix horizontal
@@ -146,3 +153,57 @@ private struct HorizontalScrubView: UIViewRepresentable {
         }
     }
 }
+
+#else
+
+/// The Mac reads a chart under the pointer. A tracking area reports every
+/// movement over the plot, dragging works the same way, and the readout clears
+/// the moment the pointer leaves. Wheel scrolling passes through untouched.
+private struct HorizontalScrubView: NSViewRepresentable {
+    let onChange: (CGPoint) -> Void
+    let onEnd: () -> Void
+
+    func makeNSView(context: Context) -> ScrubTrackingView {
+        let view = ScrubTrackingView()
+        view.onChange = onChange
+        view.onEnd = onEnd
+        return view
+    }
+
+    func updateNSView(_ view: ScrubTrackingView, context: Context) {
+        view.onChange = onChange
+        view.onEnd = onEnd
+    }
+
+    final class ScrubTrackingView: NSView {
+        var onChange: ((CGPoint) -> Void)?
+        var onEnd: (() -> Void)?
+
+        /// Top-left origin, like the SwiftUI geometry the chart proxy speaks.
+        override var isFlipped: Bool { true }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            addTrackingArea(NSTrackingArea(
+                rect: bounds,
+                options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                owner: self, userInfo: nil))
+        }
+
+        override func mouseMoved(with event: NSEvent) { report(event) }
+        override func mouseDragged(with event: NSEvent) { report(event) }
+        override func mouseDown(with event: NSEvent) { report(event) }
+        override func mouseExited(with event: NSEvent) { onEnd?() }
+        override func mouseUp(with event: NSEvent) {
+            // A click that ends outside the plot leaves nothing behind.
+            if !bounds.contains(convert(event.locationInWindow, from: nil)) { onEnd?() }
+        }
+
+        private func report(_ event: NSEvent) {
+            onChange?(convert(event.locationInWindow, from: nil))
+        }
+    }
+}
+
+#endif

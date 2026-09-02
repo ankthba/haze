@@ -6,6 +6,8 @@
 //  palettes. A Settings row of four swatches, current one ringed.
 //
 
+#if os(iOS)
+
 import SwiftUI
 import UIKit
 
@@ -113,3 +115,5 @@ struct AppIconPicker: View {
         }
     }
 }
+
+#endif

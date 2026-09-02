@@ -154,6 +154,7 @@ struct DetailsSection: View {
                     .fill(.white.opacity(0.10))
                     .frame(height: 0.5)
             }
+            .hoverHighlight(enabled: metric != nil)
         }
         .buttonStyle(.plain)
         .disabled(metric == nil)

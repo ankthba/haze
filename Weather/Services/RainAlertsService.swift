@@ -8,11 +8,15 @@
 //  advisory lands. Each rain window and each alert id notifies once.
 //
 //  iOS decides when (and whether) background refreshes actually run: this is
-//  best-effort by platform design, not a guaranteed schedule.
+//  best-effort by platform design, not a guaranteed schedule. The Mac has no
+//  BGTaskScheduler at all; there the app runs the same check on its own
+//  refresh timer for as long as it's open.
 //
 
 import Foundation
+#if os(iOS)
 import BackgroundTasks
+#endif
 import UserNotifications
 import CoreLocation
 
@@ -31,6 +35,7 @@ enum RainAlertsService {
 
     // MARK: - Lifecycle
 
+    #if os(iOS)
     /// Must run before the app finishes launching.
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier,
@@ -39,6 +44,9 @@ enum RainAlertsService {
             handle(refresh)
         }
     }
+    #else
+    static func register() {}
+    #endif
 
     /// Asks for notification permission; reports whether it was granted.
     static func requestPermission() async -> Bool {
@@ -47,6 +55,7 @@ enum RainAlertsService {
         return granted
     }
 
+    #if os(iOS)
     /// Queue the next background check. Called when the app backgrounds and
     /// after each background run.
     static func scheduleNextCheck() {
@@ -70,6 +79,10 @@ enum RainAlertsService {
         }
         task.expirationHandler = { work.cancel() }
     }
+    #else
+    static func scheduleNextCheck() {}
+    static func cancelScheduledChecks() {}
+    #endif
 
     /// One cheap fetch for the device place; fires at most one rain and one
     /// alert notification per run.

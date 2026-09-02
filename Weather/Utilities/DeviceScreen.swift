@@ -12,6 +12,7 @@
 //  more common of the two — the gap is a few points and reads identically.
 //
 
+#if canImport(UIKit)
 import UIKit
 
 /// Observable snapshot of the values views need every frame. Reading the window
@@ -107,3 +108,30 @@ enum DeviceScreen {
         max(minimum, displayCornerRadius - inset)
     }
 }
+
+#else
+
+import Foundation
+import Observation
+import CoreGraphics
+
+/// The Mac has windows, not a bezel: nothing here changes with rotation, and
+/// floating chrome takes a plain, generous corner rather than one measured
+/// from the display.
+@MainActor
+@Observable
+final class ScreenMetrics {
+    static let shared = ScreenMetrics()
+    private(set) var width: CGFloat = 1180
+    private(set) var bottomSafeInset: CGFloat = 0
+    private init() {}
+    func refresh() {}
+}
+
+enum DeviceScreen {
+    static var bottomSafeInset: CGFloat { 0 }
+    static var displayCornerRadius: CGFloat { 0 }
+    static func concentricRadius(inset: CGFloat, minimum: CGFloat = 22) -> CGFloat { minimum }
+}
+
+#endif

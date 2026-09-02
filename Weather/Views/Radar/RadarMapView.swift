@@ -17,7 +17,13 @@
 
 import SwiftUI
 import MapKit
+#if canImport(UIKit)
 import UIKit
+private typealias RadarPlatformRepresentable = UIViewRepresentable
+#else
+import AppKit
+private typealias RadarPlatformRepresentable = NSViewRepresentable
+#endif
 
 extension Place {
     var coordinate: CLLocationCoordinate2D {
@@ -25,7 +31,10 @@ extension Place {
     }
 }
 
-struct RadarMapView: UIViewRepresentable {
+/// MKMapView is the same class on both platforms; only the representable
+/// protocol and the bits of appearance plumbing differ, so the map is built
+/// and updated by shared code behind two thin entry points.
+struct RadarMapView: RadarPlatformRepresentable {
     let center: CLLocationCoordinate2D
     let field: RadarField?
     let currentIndex: Int
@@ -50,10 +59,22 @@ struct RadarMapView: UIViewRepresentable {
         Coordinator(tileAlpha: tileAlpha, isInteractive: isInteractive)
     }
 
-    func makeUIView(context: Context) -> MKMapView {
+    #if canImport(UIKit)
+    func makeUIView(context: Context) -> MKMapView { makeMap(context: context) }
+    func updateUIView(_ map: MKMapView, context: Context) { updateMap(map, context: context) }
+    #else
+    func makeNSView(context: Context) -> MKMapView { makeMap(context: context) }
+    func updateNSView(_ map: MKMapView, context: Context) { updateMap(map, context: context) }
+    #endif
+
+    private func makeMap(context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator
+        #if canImport(UIKit)
         map.overrideUserInterfaceStyle = isDay ? .light : .dark
+        #else
+        map.appearance = NSAppearance(named: isDay ? .aqua : .darkAqua)
+        #endif
 
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         config.pointOfInterestFilter = .excludingAll
@@ -72,12 +93,14 @@ struct RadarMapView: UIViewRepresentable {
         // the view's aspect, so what's actually on screen isn't known until
         // layout. They're derived from the real camera in the coordinator.
 
+        #if canImport(UIKit)
         // Drop the Apple Maps attribution below the floating controls panel:
         // by default it hugs the safe area, which is exactly where the panel
         // sits, leaving the logo covered. Ignoring the safe-area margin lets
         // it sit near the very bottom edge, in the clear.
         map.insetsLayoutMarginsFromSafeArea = false
         map.layoutMargins = UIEdgeInsets(top: 0, left: 12, bottom: 6, right: 12)
+        #endif
 
         map.setRegion(MKCoordinateRegion(
             center: center,
@@ -91,9 +114,14 @@ struct RadarMapView: UIViewRepresentable {
         return map
     }
 
-    func updateUIView(_ map: MKMapView, context: Context) {
+    private func updateMap(_ map: MKMapView, context: Context) {
+        #if canImport(UIKit)
         let style: UIUserInterfaceStyle = isDay ? .light : .dark
         if map.overrideUserInterfaceStyle != style { map.overrideUserInterfaceStyle = style }
+        #else
+        let appearance: NSAppearance.Name = isDay ? .aqua : .darkAqua
+        if map.appearance?.name != appearance { map.appearance = NSAppearance(named: appearance) }
+        #endif
         context.coordinator.prefetcher = prefetcher
         context.coordinator.onCameraMoved = onCameraMoved
         context.coordinator.update(field: field, index: currentIndex, on: map)
@@ -307,8 +335,13 @@ struct RadarMapView: UIViewRepresentable {
             let id = "place"
             let view = (mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MKMarkerAnnotationView)
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: id)
+            #if canImport(UIKit)
             view.glyphImage = UIImage(systemName: "mappin")
             view.markerTintColor = UIColor(red: 0.20, green: 0.52, blue: 0.96, alpha: 1)
+            #else
+            view.glyphImage = NSImage(systemSymbolName: "mappin", accessibilityDescription: nil)
+            view.markerTintColor = NSColor(red: 0.20, green: 0.52, blue: 0.96, alpha: 1)
+            #endif
             view.displayPriority = .required
             view.animatesWhenAdded = false
             return view

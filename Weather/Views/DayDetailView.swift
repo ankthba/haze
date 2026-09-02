@@ -56,7 +56,7 @@ struct DayDetailView: View {
                 .padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)
-            .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+            .safeAreaInset(edge: .top) { Color.clear.frame(height: Platform.sheetTopInset) }
 
             // Content dissolves into the status bar instead of colliding with it.
             TopScrollBlur(maxRadius: 8, height: 72)
@@ -67,6 +67,7 @@ struct DayDetailView: View {
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
         .presentationBackground(.clear)
+        .macSheetFrame()
     }
 
     // MARK: - Top bar
@@ -83,6 +84,7 @@ struct DayDetailView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(CardButtonStyle())
+                .keyboardShortcut(.cancelAction)
                 .foregroundStyle(.white)
             }
             .padding(.horizontal, 16)

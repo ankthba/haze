@@ -175,6 +175,7 @@ struct RadarView: View {
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(CardButtonStyle())
+            .keyboardShortcut(.cancelAction)
             .accessibilityLabel("Close radar")
         }
         .animation(UIPrefs.shared.reduceMotion ? nil : .easeInOut(duration: 0.2),

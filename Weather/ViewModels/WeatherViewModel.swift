@@ -602,8 +602,7 @@ final class WeatherViewModel {
     /// when permission is already granted so browsing never triggers a prompt.
     func refreshDeviceSummary() async {
         guard !isShowingDeviceLocation else { return }
-        let status = locationManager.authorizationStatus
-        guard status == .authorizedWhenInUse || status == .authorizedAlways else { return }
+        guard locationManager.authorizationStatus.isAuthorizedForApp else { return }
         if let summary = deviceSummary,
            Date().timeIntervalSince(summary.fetchedAt) < 15 * 60 { return }
         guard let place = try? await locationManager.requestCurrentPlace(),

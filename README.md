@@ -1,8 +1,8 @@
 # Haze
 
-A calm, editorial weather app for iPhone. Big serif numerals, soft skies
-that shift with the time of day and the conditions, and accurate forecasts
-with no ads and no accounts.
+A calm, editorial weather app for iPhone and Mac. Big serif numerals, soft
+skies that shift with the time of day and the conditions, and accurate
+forecasts with no ads and no accounts.
 
 > **Source-visible, not open source.** This repository is public so the
 > code can be read and learned from. All rights are reserved — see
@@ -38,11 +38,34 @@ Haze is set like a magazine, not a dashboard.
   frames and HRRR for the forecast ahead (US), RainViewer elsewhere.
 - **Air quality**: Open-Meteo's air-quality API (US AQI).
 
+## The Mac app
+
+The `HazeMac` target builds the same app for macOS from the same `Weather/`
+sources, with the handful of UIKit-bound files carrying an AppKit branch
+(the glass backdrop, chart scrubbing, haptics, the radar map). What's Mac
+about it lives in `HazeMac/`:
+
+- One sky across the whole window, no system toolbar or sidebar material:
+  the locations column and the floating controls are drawn in the app's
+  own glass and serif.
+- On a wide window the page becomes a spread: the hero holds the left
+  page while the cards scroll on the right. Narrow it and it folds back
+  into the iPhone's single column.
+- The radar opens in its own window, Settings under ⌘,, and the current
+  temperature sits in the menu bar with a small page beneath it.
+- Menu commands with keys for everything: ⌘F to find a city, ⌘1 to ⌘9 to
+  jump between saved places, ⌘R to refresh, ⇧⌘R for the radar, ⇧⌘S for
+  the sun page, ⌃⌘S to fold the locations column.
+- Charts read under the pointer; rows lift on hover; Escape closes sheets.
+
 ## Structure
 
 - `Weather/` — the app: views, view models, services, and the typography
   and material systems (`Views/Components/GlassCard.swift`,
-  `Views/Components/VariableBlur.swift`).
+  `Views/Components/VariableBlur.swift`). Shared by the iPhone and Mac
+  targets; `WeatherApp.swift` and `ContentView.swift` are iPhone-only.
+- `HazeMac/` — the Mac app's entry point, window layout, locations column,
+  menu commands, and menu bar extra.
 - `WeatherWidget/` — the home-screen widgets (small, medium, and a large
   with a 5-day outlook), which fetch on their own schedule.
 

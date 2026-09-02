@@ -38,7 +38,9 @@ struct SettingsView: View {
                             .padding(.top, 4)
 
                         textSizeCard
+                        #if os(iOS)
                         appIconCard
+                        #endif
                         accessibilityCard
                         voiceCard
                         notificationsCard
@@ -48,6 +50,9 @@ struct SettingsView: View {
                         cardOrderCard
                         homeScreenCard
                         behaviorCard
+                        #if os(macOS)
+                        macCard
+                        #endif
                         sourceCard
                         aboutCard
                     }
@@ -61,7 +66,7 @@ struct SettingsView: View {
                     .containerRelativeFrame(.horizontal)
                 }
                 .scrollIndicators(.hidden)
-                .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+                .safeAreaInset(edge: .top) { Color.clear.frame(height: Platform.sheetTopInset) }
                 // Screenshot/automation hook, a sibling of -openSettings.
                 .onAppear {
                     if ProcessInfo.processInfo.arguments.contains("-scrollToNotifications") {
@@ -74,7 +79,10 @@ struct SettingsView: View {
             TopScrollBlur(maxRadius: 8, height: 72)
                 .allowsHitTesting(false)
 
+            // A Mac Settings window closes from its own title bar.
+            #if os(iOS)
             topBar
+            #endif
         }
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
@@ -243,6 +251,7 @@ struct SettingsView: View {
             .disabled(systemOn)
     }
 
+    #if os(iOS)
     private var appIconCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 14) {
@@ -251,6 +260,27 @@ struct SettingsView: View {
             }
         }
     }
+    #endif
+
+    #if os(macOS)
+    @AppStorage(Platform.menuBarKey) private var showsMenuBar = true
+
+    /// What only a Mac can do: live in the menu bar.
+    private var macCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                CardLabel(systemImage: "menubar.rectangle", title: "Menu Bar")
+
+                settingToggle("Show the temperature in the menu bar", isOn: $showsMenuBar)
+
+                Text("A glance without switching apps: the current reading, today's range, and the next few hours, one click away.")
+                    .font(.serif(.caption))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+    #endif
 
     private var accessibilityCard: some View {
         GlassCard {
@@ -506,7 +536,8 @@ struct SettingsView: View {
                 Divider().overlay(Color.white.opacity(0.12))
                 settingToggle("Radar plays automatically", isOn: $viewModel.radarAutoplay)
                 Divider().overlay(Color.white.opacity(0.12))
-                settingToggle("Haptic feedback", isOn: $viewModel.hapticsEnabled)
+                settingToggle(Platform.isMac ? "Trackpad feedback" : "Haptic feedback",
+                              isOn: $viewModel.hapticsEnabled)
                 Divider().overlay(Color.white.opacity(0.12))
 
                 VStack(alignment: .leading, spacing: 8) {

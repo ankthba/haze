@@ -80,17 +80,17 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in
             self.authorizationStatus = status
             switch status {
-            case .authorizedWhenInUse, .authorizedAlways:
-                // CoreLocation fires this on every launch once the delegate is
-                // set; only chase a fix when someone is actually waiting on one.
-                if !self.continuations.isEmpty { manager.requestLocation() }
             case .denied, .restricted:
                 self.state = .denied
                 self.resume(throwing: LocationError.denied)
             case .notDetermined:
                 break
-            @unknown default:
-                break
+            default:
+                // CoreLocation fires this on every launch once the delegate is
+                // set; only chase a fix when someone is actually waiting on one.
+                if status.isAuthorizedForApp, !self.continuations.isEmpty {
+                    manager.requestLocation()
+                }
             }
         }
     }

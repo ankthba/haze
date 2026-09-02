@@ -150,11 +150,13 @@ struct WeatherScreen: View {
     }
 
     private func syncRainActivity() {
+        #if os(iOS)
         RainActivityManager.sync(
             nowcast: nowcast,
             bundle: bundle,
             usesInches: viewModel.precipUnit
                 .apiValue(temperatureUnit: viewModel.temperatureUnit) == "inch")
+        #endif
     }
 
     /// One reorderable block of the main screen, in the user's chosen order.

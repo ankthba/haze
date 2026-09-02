@@ -9,6 +9,9 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 /// The share payload. Rendering happens inside the export closure, so opening
 /// the share sheet costs nothing until a destination is picked.
@@ -27,9 +30,17 @@ struct ForecastShareCard: Transferable {
         let renderer = ImageRenderer(content: ShareCardView(bundle: bundle))
         renderer.scale = 3
         renderer.proposedSize = .init(width: 360, height: 450)
+        #if canImport(UIKit)
         guard let data = renderer.uiImage?.pngData() else {
             throw CocoaError(.fileWriteUnknown)
         }
+        #else
+        guard let image = renderer.cgImage,
+              let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        #endif
         return data
     }
 }

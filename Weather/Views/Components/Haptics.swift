@@ -2,22 +2,37 @@
 //  Haptics.swift
 //  Weather
 //
-//  Tiny imperative wrapper around UIFeedbackGenerator so any tap, selection, or
-//  completion across the app can fire a quick, consistent piece of haptic feedback.
+//  Tiny imperative wrapper around the platform's feedback generator so any tap,
+//  selection, or completion across the app can fire a quick, consistent piece
+//  of haptic feedback. On the iPhone that's the Taptic Engine; on the Mac it's
+//  the Force Touch trackpad, which only speaks while the pointer is doing
+//  something, so the choreography collapses to a few honest clicks.
 //
 
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 import SwiftUI
 
 enum Haptics {
     /// Master switch, driven by the Settings toggle (persisted by the view model).
     static var isEnabled = true
 
-    /// A light tap — the default for taps that open or commit something.
+    #if canImport(UIKit)
+
+    /// A light tap, the default for taps that open or commit something.
     static func tap(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
         guard isEnabled else { return }
         let generator = UIImpactFeedbackGenerator(style: style)
         generator.impactOccurred()
+    }
+
+    /// A single beat at a chosen strength, for choreographed sequences.
+    static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle, intensity: CGFloat) {
+        guard isEnabled else { return }
+        UIImpactFeedbackGenerator(style: style).impactOccurred(intensity: intensity)
     }
 
     /// The subtle tick used while moving through discrete values (pickers, scrubbing).
@@ -32,7 +47,7 @@ enum Haptics {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
-    /// The faintest tick, for content gliding under the finger — soft and low
+    /// The faintest tick, for content gliding under the finger, soft and low
     /// intensity so a fast scroll reads as a texture, not a drumroll.
     static func scrollTick() {
         guard isEnabled else { return }
@@ -41,7 +56,7 @@ enum Haptics {
 
     // MARK: - Choreographed patterns (onboarding)
 
-    /// A rising three-beat swell — soft, medium, full — like a curtain lifting.
+    /// A rising three-beat swell, soft, medium, full, like a curtain lifting.
     static func crescendo() {
         guard isEnabled else { return }
         Task { @MainActor in
@@ -63,7 +78,7 @@ enum Haptics {
         }
     }
 
-    /// The settling thump that closes the onboarding — firm, then an echo.
+    /// The settling thump that closes the onboarding, firm, then an echo.
     static func arrival() {
         guard isEnabled else { return }
         Task { @MainActor in
@@ -72,12 +87,44 @@ enum Haptics {
             UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.45)
         }
     }
+
+    #else
+
+    /// Mirrors UIKit's styles so call sites read the same on both platforms.
+    enum FeedbackStyle { case light, medium, heavy, soft, rigid }
+
+    private static func perform(_ pattern: NSHapticFeedbackManager.FeedbackPattern) {
+        guard isEnabled else { return }
+        NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .now)
+    }
+
+    static func tap(_ style: FeedbackStyle = .light) { perform(.generic) }
+
+    static func impact(_ style: FeedbackStyle, intensity: CGFloat) { perform(.generic) }
+
+    /// The trackpad only ticks while a button is down: a scrub is a drag, but
+    /// a chart read under a merely hovering pointer would buzz on every hour.
+    static func selection() {
+        guard NSEvent.pressedMouseButtons != 0 else { return }
+        perform(.alignment)
+    }
+
+    static func success() { perform(.levelChange) }
+
+    /// A tick per column of trackpad scrolling would be noise; the Mac scrolls silently.
+    static func scrollTick() {}
+
+    static func crescendo() { perform(.levelChange) }
+    static func flourish() { perform(.generic) }
+    static func arrival() { perform(.levelChange) }
+
+    #endif
 }
 
 // MARK: - Scroll ticks
 
 /// A soft haptic tick each time another column passes under the finger while a
-/// horizontal strip scrolls — the paper texture of flipping through hours.
+/// horizontal strip scrolls, the paper texture of flipping through hours.
 private struct ScrollTickHaptics: ViewModifier {
     /// Distance between ticks: one column width including spacing.
     let stride: CGFloat

@@ -46,7 +46,7 @@ struct LocationSearchView: View {
             }
             .groupedListStyle()
             .scrollContentBackground(.hidden)
-            .safeAreaInset(edge: .top) { Color.clear.frame(height: 44) }
+            .safeAreaInset(edge: .top) { Color.clear.frame(height: Platform.sheetTopInset) }
             .safeAreaInset(edge: .bottom) { searchBar }
 
             // Rows dissolve into the status bar instead of colliding with it.
@@ -86,6 +86,7 @@ struct LocationSearchView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(CardButtonStyle())
+                .keyboardShortcut(.cancelAction)
                 .foregroundStyle(.white)
             }
             .padding(.horizontal, 16)
@@ -118,7 +119,7 @@ struct LocationSearchView: View {
                         .foregroundStyle(.white.opacity(0.45)))
                 .foregroundStyle(.white)
                 .autocorrectionDisabled()
-                .textInputAutocapitalization(.words)
+                .wordsAutocapitalization()
                 .submitLabel(.search)
 
             if !query.isEmpty {

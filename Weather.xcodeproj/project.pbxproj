@@ -66,11 +66,26 @@
 		D20000000000000000000002 /* WeatherTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WeatherTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D30000000000000000000002 /* HazeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HazeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D40000000000000000000002 /* HazeWatchComplications.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HazeWatchComplications.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D50000000000000000000002 /* Haze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Haze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D50000000000000000000010 /* Exceptions for "Weather" folder in "HazeMac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				ContentView.swift,
+				WeatherApp.swift,
+			);
+			target = D50000000000000000000001 /* HazeMac */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7208527B2FD1F989006307EE /* Weather */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D50000000000000000000010 /* Exceptions for "Weather" folder in "HazeMac" target */,
+			);
 			path = Weather;
 			sourceTree = "<group>";
 		};
@@ -92,6 +107,11 @@
 		D40000000000000000000003 /* HazeWatchComplications */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = HazeWatchComplications;
+			sourceTree = "<group>";
+		};
+		D50000000000000000000003 /* HazeMac */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = HazeMac;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -132,6 +152,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D50000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -139,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				7208527B2FD1F989006307EE /* Weather */,
+				D50000000000000000000003 /* HazeMac */,
 				D10000000000000000000002 /* WeatherWidget */,
 				7208527A2FD1F989006307EE /* Products */,
 				72C9610F3032604E00A94F42 /* Recovered References */,
@@ -149,6 +177,7 @@
 			isa = PBXGroup;
 			children = (
 				720852792FD1F989006307EE /* Weather.app */,
+				D50000000000000000000002 /* Haze.app */,
 				D30000000000000000000002 /* HazeWatch.app */,
 				D40000000000000000000002 /* HazeWatchComplications.appex */,
 				D20000000000000000000002 /* WeatherTests.xctest */,
@@ -285,6 +314,29 @@
 			productReference = D40000000000000000000002 /* HazeWatchComplications.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		D50000000000000000000001 /* HazeMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D5000000000000000000000D /* Build configuration list for PBXNativeTarget "HazeMac" */;
+			buildPhases = (
+				D50000000000000000000004 /* Sources */,
+				D50000000000000000000005 /* Frameworks */,
+				D50000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7208527B2FD1F989006307EE /* Weather */,
+				D50000000000000000000003 /* HazeMac */,
+			);
+			name = HazeMac;
+			packageProductDependencies = (
+			);
+			productName = HazeMac;
+			productReference = D50000000000000000000002 /* Haze.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -299,6 +351,9 @@
 						CreatedOnToolsVersion = 26.4.1;
 					};
 					D10000000000000000000006 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					D50000000000000000000001 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
 				};
@@ -318,6 +373,7 @@
 			projectRoot = "";
 			targets = (
 				720852782FD1F989006307EE /* Weather */,
+				D50000000000000000000001 /* HazeMac */,
 				D30000000000000000000001 /* HazeWatch */,
 				D40000000000000000000001 /* HazeWatchComplications */,
 				D20000000000000000000001 /* WeatherTests */,
@@ -362,6 +418,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D50000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -394,6 +457,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D40000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D50000000000000000000004 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -866,6 +936,86 @@
 			};
 			name = Release;
 		};
+		D5000000000000000000000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconMac;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HazeMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 10;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Haze;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.weather";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Haze uses your location to show the local forecast.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Haze uses your location to show the local forecast.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather;
+				PRODUCT_NAME = Haze;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D5000000000000000000000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconMac;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = HazeMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 10;
+				DEVELOPMENT_TEAM = H7T2D2GL7U;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Haze;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.weather";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationUsageDescription = "Haze uses your location to show the local forecast.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Haze uses your location to show the local forecast.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aniketh.Weather;
+				PRODUCT_NAME = Haze;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -919,6 +1069,15 @@
 			buildConfigurations = (
 				D4000000000000000000000E /* Debug */,
 				D4000000000000000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D5000000000000000000000D /* Build configuration list for PBXNativeTarget "HazeMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D5000000000000000000000E /* Debug */,
+				D5000000000000000000000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

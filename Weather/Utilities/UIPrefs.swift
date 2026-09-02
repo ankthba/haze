@@ -15,7 +15,11 @@
 
 import Foundation
 import Observation
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 @Observable
 final class UIPrefs {
@@ -69,6 +73,7 @@ final class UIPrefs {
         reduceTransparencyOverride = d.bool(forKey: Self.reduceTransparencyKey)
         reduceMotionOverride = d.bool(forKey: Self.reduceMotionKey)
 
+        #if canImport(UIKit)
         systemBoldText = UIAccessibility.isBoldTextEnabled
         systemIncreaseContrast = UIAccessibility.isDarkerSystemColorsEnabled
         systemReduceTransparency = UIAccessibility.isReduceTransparencyEnabled
@@ -93,5 +98,26 @@ final class UIPrefs {
                 MainActor.assumeIsolated { apply(self) }
             }
         }
+        #else
+        // macOS has no Bold Text setting; the in-app toggle stands on its own.
+        // The other three come from System Settings > Accessibility > Display
+        // and are re-read whenever that panel changes anything.
+        systemBoldText = false
+        systemIncreaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        systemReduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        systemReduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NotificationCenter.default.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                let workspace = NSWorkspace.shared
+                self.systemIncreaseContrast = workspace.accessibilityDisplayShouldIncreaseContrast
+                self.systemReduceTransparency = workspace.accessibilityDisplayShouldReduceTransparency
+                self.systemReduceMotion = workspace.accessibilityDisplayShouldReduceMotion
+            }
+        }
+        #endif
     }
 }

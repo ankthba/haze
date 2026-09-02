@@ -43,6 +43,7 @@ struct DailyForecastCard: View {
                                 accent: accent
                             )
                             .contentShape(Rectangle())
+                            .hoverHighlight()
                         }
                         .buttonStyle(.plain)
 

@@ -105,6 +105,7 @@ struct AlertDetailView: View {
                                 .frame(width: 38, height: 38)
                         }
                         .buttonStyle(CardButtonStyle())
+                        .keyboardShortcut(.cancelAction)
                         .accessibilityLabel("Close advisories")
                     }
 
@@ -119,6 +120,7 @@ struct AlertDetailView: View {
             .scrollIndicators(.hidden)
         }
         .colorScheme(.dark)
+        .macSheetFrame()
     }
 
     private func advisory(_ alert: WeatherAlert) -> some View {

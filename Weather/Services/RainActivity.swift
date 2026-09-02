@@ -12,6 +12,8 @@
 //  keep the two byte-identical, ActivityKit matches them by name and coding.
 //
 
+#if os(iOS)
+
 import Foundation
 import ActivityKit
 
@@ -175,3 +177,5 @@ enum RainActivityManager {
         }
     }
 }
+
+#endif
