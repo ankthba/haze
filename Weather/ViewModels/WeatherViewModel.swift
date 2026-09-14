@@ -40,6 +40,7 @@ final class WeatherViewModel {
     private static let deviceLocationKey = "use_device_location"
     private static let onboardedKey = "has_onboarded"
     private static let whimsyKey = Voice.defaultsKey
+    static let forecastSourceKey = "forecast_source"
 
     /// The reorderable blocks of the main screen, in their user-chosen order.
     /// (The hero conditions header always stays on top.)
@@ -151,6 +152,14 @@ final class WeatherViewModel {
     /// or searched place).
     private(set) var isShowingDeviceLocation = false
 
+    /// True while a saved place stands in for a device location we wanted but
+    /// couldn't resolve. The distinction from a place the reader actually
+    /// chose is what keeps the fallback temporary: `refresh` retries the fix
+    /// while this is set, so one flaky launch fix no longer parks the app on
+    /// `savedPlaces.first` (whatever city was searched last) for the rest of
+    /// the session, widgets and notifications included.
+    private(set) var isStandingInForDeviceLocation = false
+
     /// The device location's weather, shown in the "back to your location"
     /// panel while browsing another place.
     struct DeviceSummary {
@@ -165,15 +174,73 @@ final class WeatherViewModel {
     private var enrichTask: Task<Void, Never>?
 
     /// Stamped onto cached readings so a unit change never redraws old numbers.
+    /// The source is part of the stamp too: switching models must not flash
+    /// the other model's forecast under the new attribution line.
     private var cacheUnits: WeatherCache.Units {
-        WeatherCache.Units(temperature: temperatureUnit, speed: speedUnit, precip: precipUnit)
+        WeatherCache.Units(temperature: temperatureUnit, speed: speedUnit, precip: precipUnit,
+                           source: effectiveSource)
     }
+
+    // MARK: - Forecast source
+
+    /// The model the user asked for. `effectiveSource` is what actually gets
+    /// fetched: WeatherNext needs an API key, and the choice is kept even
+    /// while no key is configured so it lights up the moment one is pasted.
+    var forecastSource: ForecastSource {
+        didSet {
+            guard oldValue != forecastSource else { return }
+            UserDefaults.standard.set(forecastSource.rawValue, forKey: Self.forecastSourceKey); CloudSync.push()
+            reloadUnlessAdoptingCloud()
+        }
+    }
+
+    /// True while `adoptCloudChanges` is writing several settings at once.
+    /// Each unit didSet below would otherwise start its own reload, and the
+    /// concurrent loads all miss the snapshot the first one has not saved
+    /// yet: one iCloud pull could cost several full WeatherNext fetches.
+    private var isAdoptingCloudSettings = false
+
+    private func reloadUnlessAdoptingCloud() {
+        guard !isAdoptingCloudSettings else { return }
+        Task { await reload() }
+    }
+
+    var effectiveSource: ForecastSource { .effective(for: forecastSource) }
+
+    /// A pasted Google Weather API key, bound to the Settings field. Local
+    /// only: it never goes through CloudSync. The key is stored on every edit
+    /// so the Settings caption follows the typing, but the reload it triggers
+    /// waits for the typing to stop: a WeatherNext refresh is about 13 calls,
+    /// and firing one per character would spend them on partial keys and let
+    /// a late failure stamp `.failed` over the final key's loaded page.
+    var weatherNextKeyOverride: String {
+        didSet {
+            let trimmed = weatherNextKeyOverride.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed != weatherNextKeyOverride { weatherNextKeyOverride = trimmed }
+            let defaults = UserDefaults.standard
+            let before = WeatherNextKey.value
+            if trimmed.isEmpty {
+                defaults.removeObject(forKey: WeatherNextKey.overrideDefaultsKey)
+            } else {
+                defaults.set(trimmed, forKey: WeatherNextKey.overrideDefaultsKey)
+            }
+            keyReloadTask?.cancel()
+            guard forecastSource == .weatherNext, WeatherNextKey.value != before else { return }
+            keyReloadTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                await reload()
+            }
+        }
+    }
+    private var keyReloadTask: Task<Void, Never>?
 
     var temperatureUnit: TemperatureUnit {
         didSet {
             guard oldValue != temperatureUnit else { return }
             UserDefaults.standard.set(temperatureUnit.rawValue, forKey: Self.tempUnitKey); CloudSync.push()
-            Task { await reload() }
+            Fmt.temperatureUnit = temperatureUnit
+            reloadUnlessAdoptingCloud()
         }
     }
 
@@ -181,7 +248,7 @@ final class WeatherViewModel {
         didSet {
             guard oldValue != speedUnit else { return }
             UserDefaults.standard.set(speedUnit.rawValue, forKey: Self.speedUnitKey); CloudSync.push()
-            Task { await reload() }
+            reloadUnlessAdoptingCloud()
         }
     }
 
@@ -206,7 +273,7 @@ final class WeatherViewModel {
             UserDefaults.standard.set(precipUnit.rawValue, forKey: Self.precipUnitKey); CloudSync.push()
             Fmt.precipUnit = precipUnit
             // Amounts are fetched in the requested unit, so refetch.
-            Task { await reload() }
+            reloadUnlessAdoptingCloud()
         }
     }
 
@@ -224,6 +291,15 @@ final class WeatherViewModel {
     var refreshMinutes: Int {
         didSet { UserDefaults.standard.set(refreshMinutes, forKey: Self.refreshMinutesKey) }
     }
+
+    /// How old a stored Google WeatherNext snapshot may be and still be
+    /// re-adapted instead of refetched on a load the user did not ask for
+    /// (a unit change, a launch, the timer, returning to the foreground). The
+    /// refresh interval is the natural window: the user has already said how
+    /// stale a page may get before it is worth a fetch, and every hourly page
+    /// Google serves counts against a per-day quota, so a unit flip that
+    /// converts locally should never spend one. An explicit refresh passes 0.
+    private var automaticSnapshotMaxAge: TimeInterval { TimeInterval(refreshMinutes * 60) }
 
     /// Whether launch should start from the device's location (when permitted)
     /// rather than the first saved place.
@@ -373,6 +449,33 @@ final class WeatherViewModel {
         }
     }
 
+    /// "Don't wake me before": on, a sunrise alert that would fire earlier
+    /// than `sunriseEarliestTime` is skipped rather than delayed (see
+    /// NotificationPlanner.sunriseEarliestMinutes). Stored as 0 when off, so
+    /// the two properties here are one setting in the planner.
+    var sunriseEarliestEnabled: Bool {
+        didSet {
+            guard oldValue != sunriseEarliestEnabled else { return }
+            NotificationPlanner.sunriseEarliestMinutes =
+                sunriseEarliestEnabled ? Self.minutes(from: sunriseEarliestTime) : 0
+            replanNotifications()
+        }
+    }
+
+    var sunriseEarliestTime: Date {
+        didSet {
+            guard sunriseEarliestEnabled else { return }
+            NotificationPlanner.sunriseEarliestMinutes = Self.minutes(from: sunriseEarliestTime)
+            replanNotifications()
+        }
+    }
+
+    /// Minutes from midnight, the shape every scheduled time is stored in.
+    private static func minutes(from date: Date) -> Int {
+        let cal = Calendar.current
+        return cal.component(.hour, from: date) * 60 + cal.component(.minute, from: date)
+    }
+
     /// When that heads-up arrives; only the hour and minute matter.
     var sunriseEveningTime: Date {
         didSet {
@@ -500,6 +603,12 @@ final class WeatherViewModel {
         sunsetAlertGate = NotificationPlanner.sunsetAlertGate
         sunriseAlertGate = NotificationPlanner.sunriseAlertGate
         sunriseEveningEnabled = NotificationPlanner.sunriseEveningEnabled
+        let earliest = NotificationPlanner.sunriseEarliestMinutes
+        sunriseEarliestEnabled = earliest > 0
+        sunriseEarliestTime = Calendar.current.date(
+            bySettingHour: (earliest > 0 ? earliest : 6 * 60) / 60,
+            minute: (earliest > 0 ? earliest : 6 * 60) % 60,
+            second: 0, of: Date()) ?? Date()
         sunriseEveningTime = Calendar.current.date(
             bySettingHour: NotificationPlanner.sunriseEveningMinutes / 60,
             minute: NotificationPlanner.sunriseEveningMinutes % 60,
@@ -524,12 +633,20 @@ final class WeatherViewModel {
         useDeviceLocation = defaults.object(forKey: Self.deviceLocationKey) as? Bool ?? true
         hasOnboarded = defaults.bool(forKey: Self.onboardedKey)
         whimsyEnabled = defaults.bool(forKey: Self.whimsyKey)
+        // A stored `.weatherNext` from before the feature was parked would
+        // otherwise leave Settings describing a source the app is not using,
+        // so the preference itself is brought back to Classic.
+        let storedSource = ForecastSource(rawValue: defaults.string(forKey: Self.forecastSourceKey) ?? "")
+            ?? .classic
+        forecastSource = WeatherNextFeature.isEnabled ? storedSource : .classic
+        weatherNextKeyOverride = defaults.string(forKey: WeatherNextKey.overrideDefaultsKey) ?? ""
         // Stored order, tolerant of future cards: unknown names are dropped and
         // any cards missing from the stored list are appended in default order.
         let stored = (defaults.stringArray(forKey: Self.cardOrderKey) ?? [])
             .compactMap(HomeCard.init(rawValue:))
         cardOrder = stored + HomeCard.allCases.filter { !stored.contains($0) }
         Fmt.timeFormat = timeFormat
+        Fmt.temperatureUnit = temperatureUnit
         Fmt.precipUnit = precipUnit
         Fmt.pressureUnit = pressureUnit
         Haptics.isEnabled = hapticsEnabled
@@ -549,16 +666,18 @@ final class WeatherViewModel {
             bundle = cached
             phase = .loaded
         }
+        var wantedDeviceLocation = false
         if useDeviceLocation, !locationManager.isDenied {
             await useCurrentLocation()
             if case .loaded = phase { return }
             // The device place resolved but its fetch failed (network blip).
             // Keep it selected while there's content on screen, because refresh()
-            // recovers it when the network returns. Falling through here used
-            // to silently and stickily switch the app to a saved city. Only an
-            // actual location failure (isShowingDeviceLocation still false) or
-            // a truly empty screen goes on to the fallbacks.
+            // recovers it when the network returns.
             if isShowingDeviceLocation, bundle != nil { return }
+            // Anything else here means we asked for the device location and
+            // have no working page for it. Whatever is shown below is a
+            // stand-in, not a choice, so it must not stick.
+            wantedDeviceLocation = true
         }
         if let first = savedPlaces.first {
             await select(first)
@@ -568,6 +687,8 @@ final class WeatherViewModel {
                                country: "United States", countryCode: "US",
                                latitude: 37.7749, longitude: -122.4194, timezone: nil))
         }
+        // After `select`, which clears the flag for a deliberate pick.
+        isStandingInForDeviceLocation = wantedDeviceLocation
     }
 
     /// What to draw before anything has been fetched: the cached forecast for
@@ -582,39 +703,62 @@ final class WeatherViewModel {
         return await WeatherCache.shared.mostRecent(units: cacheUnits)
     }
 
-    func useCurrentLocation() async {
+    /// `userInitiated` is only true on the explicit refresh path (see
+    /// `refresh`); a location fix on its own is not a request for new numbers.
+    /// Returns true when the fix itself resolved, so callers can tell a
+    /// location failure from a forecast failure.
+    @discardableResult
+    func useCurrentLocation(userInitiated: Bool = false) async -> Bool {
         if bundle == nil { phase = .loading }
         do {
             let place = try await locationManager.requestCurrentPlace()
             isShowingDeviceLocation = true
+            isStandingInForDeviceLocation = false
             deviceSummary = nil
-            await load(place: place, persist: false)
+            await load(place: place, persist: false, userInitiated: userInitiated)
+            return true
         } catch {
-            phase = .failed(error.localizedDescription)
+            // A failed fix with a page already up is not worth an error
+            // screen: those numbers are still good and the next refresh tries
+            // again. Only an empty screen has nothing better to show.
+            if bundle == nil { phase = .failed(error.localizedDescription) }
+            return false
         }
     }
 
     func select(_ place: Place) async {
         isShowingDeviceLocation = false
+        // A deliberate pick, so the stand-in retry stops here.
+        isStandingInForDeviceLocation = false
         await load(place: place, persist: true)
         await refreshDeviceSummary()
     }
 
-    func reload() async {
+    /// Re-fetch the selected place. Every settings didSet above calls this
+    /// with the default, and so does pull to refresh, which must pass
+    /// `userInitiated: true`: only a deliberate pull bypasses the WeatherNext
+    /// snapshot, a settings change re-runs the adapter on the stored one.
+    func reload(userInitiated: Bool = false) async {
         guard let place = selectedPlace else { return }
-        await load(place: place, persist: false, showSpinner: bundle == nil)
+        await load(place: place, persist: false, showSpinner: bundle == nil,
+                   userInitiated: userInitiated)
     }
 
     /// Foreground / periodic refresh. When the screen is the device location,
     /// re-resolve the location itself first, so moving cities never leaves the
-    /// app (or widget) showing where you used to be.
-    func refresh() async {
-        if isShowingDeviceLocation, !locationManager.isDenied {
-            await useCurrentLocation()
-        } else {
-            await reload()
-            await refreshDeviceSummary()
+    /// app (or widget) showing where you used to be. The scene and timer
+    /// callers take the default; the Refresh command and menu bar button pass
+    /// `userInitiated: true` so the page really goes to Google.
+    func refresh(userInitiated: Bool = false) async {
+        if isShowingDeviceLocation || isStandingInForDeviceLocation,
+           !locationManager.isDenied {
+            if await useCurrentLocation(userInitiated: userInitiated) { return }
+            // The fix failed again. On a stand-in page, fall through so those
+            // numbers still refresh; the next tick retries the fix.
+            guard isStandingInForDeviceLocation else { return }
         }
+        await reload(userInitiated: userInitiated)
+        await refreshDeviceSummary()
     }
 
     /// Fetch (or re-fetch) the device location's current conditions for the
@@ -625,9 +769,12 @@ final class WeatherViewModel {
         guard locationManager.authorizationStatus.isAuthorizedForApp else { return }
         if let summary = deviceSummary,
            Date().timeIntervalSince(summary.fetchedAt) < 15 * 60 { return }
+        // Never user-initiated: the panel is a glance, so a fresh-enough
+        // snapshot (or the page's own recent fetch) is always good enough.
         guard let place = try? await locationManager.requestCurrentPlace(),
               let current = try? await weatherService.fetchCurrentSummary(
-                  for: place, temperatureUnit: temperatureUnit) else { return }
+                  for: place, temperatureUnit: temperatureUnit, source: effectiveSource,
+                  maxAge: automaticSnapshotMaxAge) else { return }
         deviceSummary = DeviceSummary(
             place: place,
             temperature: current.temperature,
@@ -635,32 +782,62 @@ final class WeatherViewModel {
             fetchedAt: Date())
     }
 
-    private func load(place: Place, persist: Bool, showSpinner: Bool = true) async {
+    private func load(place: Place, persist: Bool, showSpinner: Bool = true,
+                      userInitiated: Bool = false) async {
         selectedPlace = place
-        // Everything after an await checks against these: if a newer selection
-        // or a unit change happened while this request was in flight, its
+        // Everything after an await checks against these: if a newer selection,
+        // a unit change or a source switch happened while this request was in flight, its
         // response is stale and must not repaint the screen, retarget the
         // widgets, or become the launch cache.
         let requestedID = place.id
         let requestedUnits = cacheUnits
         // A previous load's enrich must not outlive this newer request.
         enrichTask?.cancel()
-        // Switching places: show that place's last reading immediately rather
-        // than an empty screen while the network answers.
-        if bundle?.place.id != place.id,
-           let cached = await WeatherCache.shared.bundle(for: place, units: requestedUnits),
-           selectedPlace?.id == requestedID {
-            bundle = cached
-            phase = .loaded
-        } else if showSpinner, bundle == nil {
-            phase = .loading
+        // Switching places, or switching the source on the same place: show
+        // that place's last reading under the requested stamp immediately
+        // rather than an empty screen while the network answers. Without one,
+        // a same-place source switch clears the screen instead of leaving the
+        // other model's numbers under the new attribution; the spinner (and,
+        // if the fetch fails, the error) then say what is happening.
+        //
+        // A Classic Haze page carrying a `sourceNotice` is what a WeatherNext
+        // request produced (the fallback path in WeatherService.fetchForecast),
+        // so it counts as matching a WeatherNext stamp: a refresh must not
+        // blank it to a spinner while Google is retried.
+        let displayedMatches = bundle.map {
+            $0.place.id == place.id
+                && (($0.source ?? .classic) == requestedUnits.source
+                    || ($0.sourceNotice != nil && requestedUnits.source == .weatherNext))
+        } ?? false
+        // Toggling back to Classic Haze makes a fallback's notice meaningless
+        // (the page is now the source that was asked for), so it goes at once
+        // rather than lingering until the network answers.
+        if requestedUnits.source == .classic, bundle?.sourceNotice != nil {
+            bundle?.sourceNotice = nil
+        }
+        if !displayedMatches {
+            if let cached = await WeatherCache.shared.bundle(for: place, units: requestedUnits),
+               selectedPlace?.id == requestedID {
+                bundle = cached
+                phase = .loaded
+            } else if bundle?.place.id == place.id {
+                bundle = nil
+                phase = .loading
+            } else if showSpinner, bundle == nil {
+                phase = .loading
+            }
         }
         do {
             var result = try await weatherService.fetchForecast(
                 for: place,
                 temperatureUnit: temperatureUnit,
                 speedUnit: speedUnit,
-                precipUnit: precipUnit
+                precipUnit: precipUnit,
+                source: effectiveSource,
+                // The bundle cache above is keyed by units, so a unit flip is
+                // always a miss there; the Google snapshot is not, and it is
+                // what keeps that flip free of network calls.
+                weatherNextMaxAge: userInitiated ? 0 : automaticSnapshotMaxAge
             )
             guard selectedPlace?.id == requestedID, cacheUnits == requestedUnits else { return }
             // Alerts arrive via enrich, not the forecast, so carry the on-screen
@@ -671,6 +848,12 @@ final class WeatherViewModel {
             if bundle?.place.id == result.place.id {
                 result.alerts = bundle?.alerts?.filter { ($0.ends ?? .distantFuture) > Date() }
             }
+            // `result` may be Classic Haze with a `sourceNotice` when WeatherNext
+            // was requested and failed: that is still a forecast, so it is shown
+            // and marked .loaded (never .failed), and it is cached under the
+            // requested (WeatherNext) stamp below so the next launch, and
+            // openingBundle, draw it immediately. A later WeatherNext success
+            // lands here the same way and simply replaces it.
             bundle = result
             phase = .loaded
             // Units always reach the widgets, even when the device-location
@@ -710,8 +893,11 @@ final class WeatherViewModel {
                   cacheUnits == units
             else { return }
             let enriched = current.applying(airQuality: extras.airQuality,
+                                            observation: extras.observation,
                                             observedCode: extras.observedCode,
-                                            alerts: extras.alerts)
+                                            alerts: extras.alerts,
+                                            temperatureUnit: temperatureUnit,
+                                            speedUnit: speedUnit)
             bundle = enriched
             publishToWidgets(enriched)
             Task { await WeatherCache.shared.save(enriched, units: units) }
@@ -768,16 +954,21 @@ final class WeatherViewModel {
         let cloudTemp = TemperatureUnit(rawValue: defaults.string(forKey: Self.tempUnitKey) ?? "")
         let cloudSpeed = SpeedUnit(rawValue: defaults.string(forKey: Self.speedUnitKey) ?? "")
         let cloudPrecip = PrecipUnit(rawValue: defaults.string(forKey: Self.precipUnitKey) ?? "")
+        let cloudSource = ForecastSource(rawValue: defaults.string(forKey: Self.forecastSourceKey) ?? "")
+        // The didSets hold their reloads while these land, then one reload
+        // covers every setting that moved.
+        isAdoptingCloudSettings = true
         var unitsMoved = false
         if let cloudTemp, cloudTemp != temperatureUnit { temperatureUnit = cloudTemp; unitsMoved = true }
         if let cloudSpeed, cloudSpeed != speedUnit { speedUnit = cloudSpeed; unitsMoved = true }
         if let cloudPrecip, cloudPrecip != precipUnit { precipUnit = cloudPrecip; unitsMoved = true }
+        if let cloudSource, cloudSource != forecastSource { forecastSource = cloudSource; unitsMoved = true }
+        isAdoptingCloudSettings = false
         // The voice is prose, not a unit: adopting it recomposes the brief in
         // place rather than kicking a reload.
         let cloudWhimsy = defaults.bool(forKey: Self.whimsyKey)
         if cloudWhimsy != whimsyEnabled { whimsyEnabled = cloudWhimsy }
-        // The unit didSets each kick a reload; nothing more to do here.
-        _ = unitsMoved
+        if unitsMoved { Task { await reload() } }
     }
 
     func addSavedPlace(_ place: Place) {
@@ -790,6 +981,9 @@ final class WeatherViewModel {
     func removeSavedPlace(_ place: Place) {
         savedPlaces.removeAll { $0.id == place.id }
         persistSavedPlaces()
+        // The Google snapshot is hundreds of kilobytes a place and nothing
+        // else would ever reclaim it.
+        WeatherNextRawCache.shared.remove(for: place)
     }
 
     func moveSavedPlace(from offsets: IndexSet, to destination: Int) {

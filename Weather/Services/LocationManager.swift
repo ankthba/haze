@@ -23,6 +23,14 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// drop the first caller's continuation, hanging that task forever.
     private var continuations: [CheckedContinuation<Place, Error>] = []
 
+    /// Retries left for the request in flight. `kCLErrorLocationUnknown` means
+    /// CoreLocation has no fix *yet*, not that it can't get one: indoors, on a
+    /// cold start, or just after wake, the first attempt routinely fails and
+    /// the next succeeds. Treating that as terminal is what used to bump the
+    /// app off the device location and onto a saved city.
+    private var retriesLeft = 0
+    private static let maxRetries = 2
+
     var authorizationStatus: CLAuthorizationStatus
     private(set) var state: State = .idle
 
@@ -64,6 +72,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             // Only the first waiter starts CoreLocation; later callers just
             // join the fix already underway.
             guard continuations.count == 1 else { return }
+            retriesLeft = Self.maxRetries
             let status = manager.authorizationStatus
             if status == .notDetermined {
                 manager.requestWhenInUseAuthorization()
@@ -105,7 +114,18 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager,
                                      didFailWithError error: Error) {
+        let isTransient = (error as? CLError)?.code == .locationUnknown
         Task { @MainActor in
+            if isTransient, self.retriesLeft > 0, !self.continuations.isEmpty {
+                self.retriesLeft -= 1
+                // A beat before asking again: the usual cause is that no fix
+                // has arrived yet, and retrying in the same runloop turn just
+                // spends a retry on the same empty answer.
+                try? await Task.sleep(for: .seconds(1))
+                guard !self.continuations.isEmpty else { return }
+                self.manager.requestLocation()
+                return
+            }
             self.state = .failed
             self.resume(throwing: LocationError.unavailable)
         }
