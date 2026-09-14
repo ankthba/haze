@@ -39,21 +39,27 @@ Haze is built to be quiet and beautiful. Weather you actually enjoy looking at.
 Weather data by Open-Meteo.
 
 ## What's New (release notes for 2.1)
-Accuracy, sharpened.
+Haze 2.1 has an array of bug fixes and improvements.
 
-Live conditions from a real weather station. In the US, the temperature, wind, humidity, pressure and dew point on the front page now come from the nearest reporting station rather than a forecast model, and the page tells you which station it used and how far away it is. A model knows what the afternoon should look like; an instrument knows what is happening outside right now.
+Current conditions now come from a real weather station. In the US, the temperature, wind, humidity, pressure and dew point on the main screen are readings from the nearest reporting station rather than a forecast model. The page shows which station reported them and how far away it is.
 
-The reading always matches the hour. The big number and the hourly strip could drift apart on a page that had been open or cached for a while, sometimes by a lot on a hot afternoon. They now move together, always.
+Fixed the temperature on the main screen not matching the hourly forecast below it. On a page that had been open or cached for a while this could be off by several degrees.
 
-Your location stays your location. A single missed GPS fix could quietly move the app to another saved city and keep it there. It now retries, and comes home on its own.
+Fixed the app switching to a saved city when it could not get your location. It now retries, and returns to your location on its own.
 
-Rain, better measured. Precipitation amounts and snow totals in the US now follow the National Blend of Models, the calibrated guidance behind the official forecast, as the chances already did.
+Rain and snow amounts in the US now use the National Blend of Models, the same guidance behind the official forecast. Rain chances already did.
 
-Notifications worth keeping on. The golden hour heads-up now reads the sky at golden hour instead of the sky right now, sunrise alerts can be told never to arrive before a set time, and Settings shows exactly what is scheduled, with a button to send a test.
+The golden hour alert now checks the sky at golden hour rather than the sky at the time it is scheduled, so a cloudy morning no longer cancels a clear evening.
 
-A clearer 72-hour trend. Days are separated and named, so three days of weather no longer read as one long wave.
+Sunrise alerts can now be set to never arrive before a time you choose.
 
-Settings, rethought. Grouped by what each setting actually governs, and wearing the app's own controls on iPhone rather than the system's.
+Settings now shows which notifications are scheduled and when, with a button to send a test.
+
+The 72-hour trend chart marks and labels each day, so it is clear where one day ends and the next begins.
+
+Settings is reorganized by topic, and uses the app's own switches and pickers on iPhone instead of the system ones.
+
+As always, thanks for using Haze Weather!
 
 ## What's New (release notes for 2.0, shipped)
 Haze 2.0 is a new app from top to bottom.
