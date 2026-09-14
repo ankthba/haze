@@ -51,11 +51,18 @@ enum RainAlertsService {
     /// Asks for notification permission; reports whether it was granted.
     static func requestPermission() async -> Bool {
         let center = UNUserNotificationCenter.current()
-        // `.timeSensitive` has to be asked for here: without it the system
-        // silently demotes every time-sensitive interruption level back to
-        // ordinary, and a rain warning waits behind a Focus.
+        // Deliberately NOT asking for `.timeSensitive`: that option is
+        // deprecated (iOS 15 replaced it with the Time Sensitive
+        // Notifications entitlement), and that entitlement is one this App ID
+        // does not carry — see the note in Weather.entitlements, which keeps
+        // unregistered capabilities out of the build on purpose. Asking for
+        // it here requested a capability the app has no right to.
+        //
+        // The interruption levels set elsewhere are still correct: they take
+        // effect the moment the capability is enabled, and until then the
+        // system quietly serves them as ordinary notifications.
         let granted = (try? await center.requestAuthorization(
-            options: [.alert, .sound, .badge, .timeSensitive])) ?? false
+            options: [.alert, .sound])) ?? false
         return granted
     }
 
