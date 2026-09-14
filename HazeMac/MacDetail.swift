@@ -29,7 +29,7 @@ struct MacDetail: View {
             switch viewModel.phase {
             case .idle where viewModel.bundle == nil,
                  .loading where viewModel.bundle == nil:
-                MacLoadingView()
+                MacLoadingView(source: viewModel.effectiveSource)
             case .failed(let message) where viewModel.bundle == nil:
                 MacErrorView(message: message) {
                     Task { await viewModel.bootstrap() }
@@ -42,7 +42,7 @@ struct MacDetail: View {
                                    selectedDay: $selectedDay)
                         .transition(.opacity)
                 } else {
-                    MacLoadingView()
+                    MacLoadingView(source: viewModel.effectiveSource)
                 }
             }
         }
@@ -55,7 +55,7 @@ struct MacDetail: View {
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .top) { topBar }
-        .navigationTitle(viewModel.bundle?.place.name ?? "Haze")
+        .navigationTitle(viewModel.bundle?.place.name ?? "haze°")
         .hazeSheet(item: $selectedDay) { day, close in
             if let bundle = viewModel.bundle {
                 DayDetailView(day: day, bundle: bundle,
@@ -302,9 +302,24 @@ struct MacWeatherPage: View {
                     .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.75))
             }
-            Text("Data from Open-Meteo, blending ECMWF, GFS & ICON models")
+            // When a real instrument supplied the hero numbers, say which
+            // one and how far away; the phone page carries the same line.
+            if let observation = bundle.displayedObservation {
+                Text(observation.provenance(
+                    usesImperial: viewModel.temperatureUnit == .fahrenheit))
+                    .font(.serif(.caption2))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+            Text(bundle.attributionLine)
                 .font(.serif(.caption2))
                 .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+            // Why the page differs from the WeatherNext setting: a fallback
+            // to Classic Haze, or hours borrowed from Open-Meteo.
+            if let notice = bundle.sourceNotice {
+                SourceNoticeLine(notice: notice)
+            }
         }
         .padding(.top, 6)
     }

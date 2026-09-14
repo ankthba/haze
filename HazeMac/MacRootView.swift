@@ -20,10 +20,13 @@ struct MacRootView: View {
 
     static let sidebarWidth: CGFloat = 272
 
+    /// The same stamp the view model caches under, source included, so the
+    /// sidebar reads the page's own cached forecasts instead of refetching.
     private var units: WeatherCache.Units {
         WeatherCache.Units(temperature: viewModel.temperatureUnit,
                            speed: viewModel.speedUnit,
-                           precip: viewModel.precipUnit)
+                           precip: viewModel.precipUnit,
+                           source: viewModel.effectiveSource)
     }
 
     /// Before the first forecast lands the window wears the app's day sky.
@@ -108,7 +111,7 @@ struct MacRootView: View {
             if viewModel.bundle == nil {
                 await viewModel.bootstrap()
             }
-            await summaries.refresh(places: viewModel.savedPlaces, units: units)
+            await refreshSummaries()
         }
         // Silent periodic refresh at the user-chosen interval; the task
         // restarts whenever the interval setting changes. The rain and
@@ -119,7 +122,7 @@ struct MacRootView: View {
                 try? await Task.sleep(for: .seconds(Double(viewModel.refreshMinutes) * 60))
                 guard !Task.isCancelled, viewModel.bundle != nil else { continue }
                 await viewModel.refresh()
-                await summaries.refresh(places: viewModel.savedPlaces, units: units)
+                await refreshSummaries()
                 await RainAlertsService.runCheck()
             }
         }
@@ -129,7 +132,7 @@ struct MacRootView: View {
             }
         }
         .onChange(of: viewModel.savedPlaces) {
-            Task { await summaries.refresh(places: viewModel.savedPlaces, units: units) }
+            Task { await refreshSummaries() }
         }
         .onChange(of: viewModel.bundle?.fetchedAt) {
             if let bundle = viewModel.bundle {
@@ -137,7 +140,10 @@ struct MacRootView: View {
             }
         }
         .onChange(of: viewModel.temperatureUnit) {
-            Task { await summaries.refresh(places: viewModel.savedPlaces, units: units, force: true) }
+            Task { await refreshSummaries(force: true) }
+        }
+        .onChange(of: viewModel.effectiveSource) {
+            Task { await refreshSummaries(force: true) }
         }
         .hazeSheet(isPresented: $windows.showSunEvents) { close in
             if let bundle = viewModel.bundle {
@@ -152,6 +158,15 @@ struct MacRootView: View {
         // The cards themselves, over a blur of the whole window.
         .overlay { MacCardOverlay(presenter: cards) }
         .environment(\.cardPresenter, cards)
+    }
+
+    /// The sidebar's WeatherNext readings may come from a stored Google
+    /// snapshot as old as the refresh interval: that is the same window the
+    /// page itself accepts, so the two never disagree about freshness, and a
+    /// sidebar pass after a unit change or a relaunch costs no Google calls.
+    private func refreshSummaries(force: Bool = false) async {
+        await summaries.refresh(places: viewModel.savedPlaces, units: units, force: force,
+                                snapshotMaxAge: TimeInterval(viewModel.refreshMinutes * 60))
     }
 
     private var intro: some View {

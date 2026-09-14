@@ -2,7 +2,9 @@
 //  OpenMeteoResponse.swift
 //  Weather
 //
-//  Decodable mirrors of the Open-Meteo JSON wire format.
+//  Decodable mirrors of the Open-Meteo JSON wire format. WeatherNextService
+//  builds the same shape from Google's answer, and OpenMeteoGapFill splices
+//  into it, which is why several fields are `var` rather than `let`.
 //
 
 import Foundation
@@ -11,15 +13,18 @@ struct ForecastResponse: Decodable {
     let timezone: String
     let utcOffsetSeconds: Int
     /// Metres above sea level at the grid cell; the UV model adds a little
-    /// per kilometre of thinner air.
-    let elevation: Double?
+    /// per kilometre of thinner air. `var`: WeatherNext has no elevation and
+    /// the gap fill supplies it (see OpenMeteoGapFill.swift).
+    var elevation: Double?
     let current: Current
-    // `var`: the NBM overlay splices into these — see NBMOverlay.swift.
+    // `var`: the NBM overlay and the gap fill splice into these; see
+    // NBMOverlay.swift and OpenMeteoGapFill.swift.
     var hourly: Hourly
     var daily: Daily
     /// 15-minute precipitation for the next ~3 h; optional because the model
-    /// only covers some regions and the key is absent elsewhere.
-    let minutely15: Minutely15?
+    /// only covers some regions and the key is absent elsewhere. `var`: under
+    /// WeatherNext the gap fill provides it.
+    var minutely15: Minutely15?
 
     enum CodingKeys: String, CodingKey {
         case timezone
@@ -65,25 +70,38 @@ struct ForecastResponse: Decodable {
     }
 
     /// `var` fields are the ones the NBM overlay may splice calibrated values
-    /// into for US locations — see NBMOverlay.swift.
+    /// into for US locations (see NBMOverlay.swift), plus the cloud columns
+    /// the gap fill completes under WeatherNext (see OpenMeteoGapFill.swift).
+    /// The time axis and the remaining columns are `var` for one reason only:
+    /// under WeatherNext the gap fill appends whole Open-Meteo hours wherever
+    /// Google's series has none (quota, a shorter horizon, a failed page),
+    /// and an appended row has to reach every column at once.
     struct Hourly: Decodable {
-        let time: [String]
+        var time: [String]
         var temperature: [Double]
         var humidity: [Double]
         var apparentTemperature: [Double]
         var precipitationProbability: [Int]
-        let precipitation: [Double]
-        let weatherCode: [Int]
+        var precipitation: [Double]
+        var weatherCode: [Int]
         var windSpeed: [Double]
         var windDirection: [Double]
-        let isDay: [Int]
+        var isDay: [Int]
+        /// Total cloud cover, percent. The classic request does not ask for
+        /// it (the layers below carry more information), so it is absent
+        /// there; the WeatherNext adapter fills it with Google's per-hour
+        /// total, which the gap fill scales Open-Meteo's layers against.
+        var cloudCover: [Double]?
         /// Optional: these joined the request later, and absence must not
         /// fail the whole decode.
         var dewPoint: [Double]?
         var visibility: [Double]?
-        let cloudCoverLow: [Double]?
-        let cloudCoverMid: [Double]?
-        let cloudCoverHigh: [Double]?
+        /// Element-optional: under WeatherNext the layers are spliced in hour
+        /// by hour from Open-Meteo, and an hour with no usable layer data must
+        /// read as "unknown" for that hour alone, not sink the whole column.
+        var cloudCoverLow: [Double?]?
+        var cloudCoverMid: [Double?]?
+        var cloudCoverHigh: [Double?]?
 
         enum CodingKeys: String, CodingKey {
             case time
@@ -96,6 +114,7 @@ struct ForecastResponse: Decodable {
             case windSpeed = "wind_speed_10m"
             case windDirection = "wind_direction_10m"
             case isDay = "is_day"
+            case cloudCover = "cloud_cover"
             case dewPoint = "dew_point_2m"
             case visibility
             case cloudCoverLow = "cloud_cover_low"
@@ -104,24 +123,26 @@ struct ForecastResponse: Decodable {
         }
     }
 
-    /// `var` fields are the ones the NBM overlay may splice calibrated values
-    /// into for US locations — see NBMOverlay.swift.
+    /// Everything here is `var`: the NBM overlay splices calibrated values
+    /// into the temperature, probability and wind columns for US locations
+    /// (see NBMOverlay.swift), and under WeatherNext the gap fill prepends a
+    /// whole pre-today row to every column at once (see OpenMeteoGapFill.swift).
     struct Daily: Decodable {
-        let time: [String]
-        let weatherCode: [Int]
+        var time: [String]
+        var weatherCode: [Int]
         var tempMax: [Double]
         var tempMin: [Double]
         var apparentMax: [Double]
         var apparentMin: [Double]
-        let sunrise: [String]
-        let sunset: [String]
-        let precipitationSum: [Double]
+        var sunrise: [String]
+        var sunset: [String]
+        var precipitationSum: [Double]
         var precipitationProbabilityMax: [Int]
         var windSpeedMax: [Double]
         var windGustMax: [Double]
         var windDirectionDominant: [Double]
         /// Optional for the same forward-compatibility reason as the hourly pair.
-        let snowfallSum: [Double]?
+        var snowfallSum: [Double]?
 
         enum CodingKeys: String, CodingKey {
             case time

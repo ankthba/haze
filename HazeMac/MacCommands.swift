@@ -39,7 +39,7 @@ struct MacCommands: Commands {
             Divider()
 
             Button("Refresh") {
-                Task { await viewModel.refresh() }
+                Task { await viewModel.refresh(userInitiated: true) }
             }
             .keyboardShortcut("r")
             .disabled(viewModel.bundle == nil)

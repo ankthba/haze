@@ -18,7 +18,7 @@ struct MenuBarLabel: View {
             Label(Fmt.tempDegree(bundle.current.temperature),
                   systemImage: bundle.current.condition.symbolName)
         } else {
-            Label("Haze", systemImage: "cloud.sun")
+            Label("haze°", systemImage: "cloud.sun")
         }
     }
 }
@@ -118,7 +118,7 @@ struct MenuBarPanel: View {
                 .keyboardShortcut(.defaultAction)
                 Spacer()
                 Button("Refresh") {
-                    Task { await viewModel.refresh() }
+                    Task { await viewModel.refresh(userInitiated: true) }
                 }
                 Button("Quit") {
                     NSApp.terminate(nil)

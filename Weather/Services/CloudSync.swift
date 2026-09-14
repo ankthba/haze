@@ -26,14 +26,16 @@ enum CloudSync {
     }
 
     /// Keys mirrored in both directions. Values stay in UserDefaults as the
-    /// source of truth for the running app; iCloud is the courier.
+    /// source of truth for the running app; iCloud is the courier. The
+    /// WeatherNext API key override is deliberately absent: a pasted
+    /// credential is not a preference worth carrying to other devices.
     static let placesKey = "saved_places_v1"
     static let mirroredSettings = [
         "temp_unit", "speed_unit", "precip_unit", "pressure_unit",
         "time_format", "text_size", "home_card_order",
         "show_trend_card", "show_radar_preview", "show_wind_compass",
         "show_sun_card", "show_daily_brief", "radar_autoplay",
-        Voice.defaultsKey,
+        Voice.defaultsKey, WeatherViewModel.forecastSourceKey,
     ]
 
     /// Push local values up. Called after any change worth carrying.

@@ -28,16 +28,33 @@ actor WeatherCache {
     }
 
     /// Readings are stored in the units they were fetched in, so a unit change
-    /// can't briefly redraw the old numbers under the new symbol.
+    /// can't briefly redraw the old numbers under the new symbol. The forecast
+    /// source rides on the same stamp for the same reason: switching models
+    /// must not flash the other model's numbers under the new attribution.
     struct Units: Codable, Equatable {
         let temperature: TemperatureUnit
         let speed: SpeedUnit
         let precip: PrecipUnit
+        let source: ForecastSource
 
-        init(temperature: TemperatureUnit, speed: SpeedUnit, precip: PrecipUnit) {
+        init(temperature: TemperatureUnit, speed: SpeedUnit, precip: PrecipUnit,
+             source: ForecastSource = .classic) {
             self.temperature = temperature
             self.speed = speed
             self.precip = precip
+            self.source = source
+        }
+
+        /// Caches written before the source existed carry no field for it;
+        /// they were all Open-Meteo, so they decode as `.classic` and stay
+        /// valid rather than being thrown away on the first launch after
+        /// the update.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            temperature = try c.decode(TemperatureUnit.self, forKey: .temperature)
+            speed = try c.decode(SpeedUnit.self, forKey: .speed)
+            precip = try c.decode(PrecipUnit.self, forKey: .precip)
+            source = try c.decodeIfPresent(ForecastSource.self, forKey: .source) ?? .classic
         }
     }
 
