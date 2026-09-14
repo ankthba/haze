@@ -7,6 +7,22 @@
 
 import SwiftUI
 
+/// The footer's explanation when the page is not quite what the WeatherNext
+/// setting promised: the whole page fell back to Classic Haze, or only the
+/// hourly detail came from Open-Meteo because Google's quota for it was used
+/// up. The service composes the full sentence, so this prints it as is.
+/// Shared with the Mac colophon so both pages say it the same way.
+struct SourceNoticeLine: View {
+    let notice: String
+
+    var body: some View {
+        Text(notice)
+            .font(.serif(.caption2))
+            .foregroundStyle(.white.opacity(0.7))
+            .multilineTextAlignment(.center)
+    }
+}
+
 struct WeatherScreen: View {
     let bundle: WeatherBundle
     @Bindable var viewModel: WeatherViewModel
@@ -88,17 +104,44 @@ struct WeatherScreen: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .padding(.top, 4)
 
-                    Text("Data from Open-Meteo, blending ECMWF, GFS & ICON models")
-                        .font(.serif(.caption2))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .padding(.bottom, 8)
+                    // When a real instrument supplied the hero numbers, say
+                    // which one and how far away. A measured reading and a
+                    // modeled one earn different trust, and nothing else on
+                    // the page tells them apart.
+                    if let observation = bundle.displayedObservation {
+                        Text(observation.provenance(
+                            usesImperial: viewModel.temperatureUnit == .fahrenheit))
+                            .font(.serif(.caption2))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 2)
+                    }
+
+                    // Google's terms want their credit visible near the foot
+                    // of the content, so this line stays at the very bottom of
+                    // the page. It names the source of the numbers on screen,
+                    // not the preference, which can differ mid-switch.
+                    VStack(spacing: 6) {
+                        Text(bundle.attributionLine)
+                            .font(.serif(.caption2))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                        // A WeatherNext failure falls back to Open-Meteo
+                        // inside the same load rather than blanking the
+                        // page, and a spent hourly quota borrows only the
+                        // hours; either way this says what happened and why.
+                        if let notice = bundle.sourceNotice {
+                            SourceNoticeLine(notice: notice)
+                        }
+                    }
+                    .padding(.bottom, 8)
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 12)
             }
             .scrollIndicators(.hidden)
             .refreshable {
-                await viewModel.reload()
+                await viewModel.reload(userInitiated: true)
                 Haptics.success()
             }
             .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in

@@ -33,12 +33,14 @@ struct ContentView: View {
             switch viewModel.phase {
             case .idle where viewModel.bundle == nil,
                  .loading where viewModel.bundle == nil:
-                LoadingView()
+                LoadingView(source: viewModel.effectiveSource)
             case .failed(let message) where viewModel.bundle == nil:
                 ErrorView(message: message) {
                     Task { await viewModel.bootstrap() }
                 } onSearch: {
                     showSearch = true
+                } onSettings: {
+                    showSettings = true
                 }
             default:
                 if let bundle = viewModel.bundle {
@@ -76,7 +78,7 @@ struct ContentView: View {
                                value: viewModel.isShowingDeviceLocation)
                     .transition(.opacity)
                 } else {
-                    LoadingView()
+                    LoadingView(source: viewModel.effectiveSource)
                 }
             }
         }
@@ -181,6 +183,10 @@ struct ContentView: View {
 // MARK: - Loading
 
 private struct LoadingView: View {
+    /// Which forecast the fetch is out for, so the credit at the foot names
+    /// it before the page does.
+    let source: ForecastSource
+
     @State private var breathe = false
 
     var body: some View {
@@ -212,9 +218,11 @@ private struct LoadingView: View {
 
                 Spacer()
 
-                Text("Data from Open-Meteo")
+                Text(source.attributionLine)
                     .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
                     .padding(.bottom, 18)
             }
         }
@@ -228,6 +236,9 @@ private struct ErrorView: View {
     let message: String
     let onRetry: () -> Void
     let onSearch: () -> Void
+    /// Settings is where a forecast source or its key gets fixed, so the
+    /// failure screen offers the door instead of leaving the reader stranded.
+    let onSettings: () -> Void
 
     var body: some View {
         ZStack {
@@ -254,18 +265,32 @@ private struct ErrorView: View {
                 // one screen a user sees when things break.
                 HStack(spacing: 12) {
                     Button(action: onRetry) {
-                        Text("Try Again")
+                        Text("Try again")
                             .font(.serif(.body, weight: .medium))
+                            // The prominent pill takes the white tint, and
+                            // the label would otherwise be white on white.
+                            .foregroundStyle(Color(hex: 0x0B1020))
                     }
                     .buttonStyle(.borderedProminent)
                     Button(action: onSearch) {
-                        Text("Search a City")
+                        Text("Search a city")
                             .font(.serif(.body, weight: .medium))
                     }
                     .buttonStyle(.bordered)
                 }
                 .tint(.white)
                 .padding(.top, 6)
+
+                // Quieter than the pills: a footnote link, the way Settings
+                // sets "Get a key".
+                Button(action: onSettings) {
+                    Text("Settings")
+                        .font(.serif(.subheadline, weight: .medium))
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.top, 4)
             }
         }
         .colorScheme(.dark)

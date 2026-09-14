@@ -72,12 +72,12 @@ extension View {
     /// The app's own switch on the Mac; the system's white-tinted one on the
     /// iPhone, where it already belongs.
     @ViewBuilder
+    /// The app's own switch, on every platform. It used to be Mac-only, on
+    /// the reasoning that the tinted system switch sat well enough on the
+    /// sky; side by side with the Mac's glass it just read as a different
+    /// app's control, so both wear the same one now.
     func hazeToggleStyle() -> some View {
-        #if os(macOS)
         self.toggleStyle(HazeToggleStyle())
-        #else
-        self
-        #endif
     }
 
     /// `containerRelativeFrame(.horizontal)` on the iPhone; on the Mac that

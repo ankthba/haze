@@ -4,10 +4,11 @@
 //
 //  Preferences: appearance (text size), units, time format, the voice the
 //  forecast is written in, home-screen cards, radar behavior, haptics, and
-//  data provenance.
+//  where the forecast comes from (with the key Google's WeatherNext needs).
 //
 
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @Bindable var viewModel: WeatherViewModel
@@ -19,6 +20,11 @@ struct SettingsView: View {
 
     @Bindable var prefs = UIPrefs.shared
     @Environment(\.dismiss) private var dismiss
+
+    /// What the system has queued, and whether it will deliver any of it.
+    @State private var pendingNotifications: [(id: String, fires: Date)] = []
+    @State private var notificationsDenied = false
+    @State private var testSent = false
 
     private var inPanel: Bool { onClose != nil }
 
@@ -45,22 +51,36 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 4)
 
+                        // Grouped by what each setting actually governs, in
+                        // the order a reader meets them: the numbers on the
+                        // page, then what the app says unprompted, then how
+                        // the page looks, then how the app behaves, then the
+                        // things you set once and forget.
+                        groupHeading("Reading")
+                        unitsCard
+                        timeCard
+
+                        groupHeading("Alerts")
+                        notificationsCard
+                            .id("notifications")
+
+                        groupHeading("The page")
+                        homeScreenCard
+                        cardOrderCard
                         textSizeCard
+                        accessibilityCard
+                        voiceCard
                         #if os(iOS)
                         appIconCard
                         #endif
-                        accessibilityCard
-                        voiceCard
-                        notificationsCard
-                            .id("notifications")
-                        unitsCard
-                        timeCard
-                        cardOrderCard
-                        homeScreenCard
+
+                        groupHeading("Behavior")
                         behaviorCard
                         #if os(macOS)
                         macCard
                         #endif
+
+                        groupHeading("About")
                         sourceCard
                         aboutCard
                     }
@@ -101,6 +121,19 @@ struct SettingsView: View {
         .colorScheme(.dark)
         .presentationDragIndicator(.visible)
         .presentationBackground(.clear)
+    }
+
+    /// A quiet rule between groups of cards. Lowercase small serif rather
+    /// than a boxed header: the cards are already the structure, this only
+    /// says where one subject ends and the next begins.
+    private func groupHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.serif(.subheadline, italic: true))
+            .foregroundStyle(.white.opacity(0.65))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+            .padding(.top, 6)
+            .accessibilityAddTraits(.isHeader)
     }
 
     // MARK: - Top bar
@@ -446,6 +479,12 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 CardLabel(systemImage: "bell", title: "Notifications")
 
+                // Every toggle below is a lie while the system says no, and
+                // nothing else in the app would ever tell the reader that.
+                if notificationsDenied {
+                    permissionWarning
+                }
+
                 settingToggle("Rain & advisories", isOn: $viewModel.notificationsEnabled)
                 Divider().overlay(Color.white.opacity(0.12))
 
@@ -456,10 +495,8 @@ struct SettingsView: View {
                             .font(.serif(.subheadline, weight: .medium))
                             .foregroundStyle(.white.opacity(0.85))
                         Spacer()
-                        DatePicker("Digest time", selection: $viewModel.digestTime,
-                                   displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                            .colorScheme(.dark)
+                        HazeTimePicker(date: $viewModel.digestTime,
+                                       timeFormat: viewModel.timeFormat)
                     }
                 }
                 Divider().overlay(Color.white.opacity(0.12))
@@ -479,6 +516,21 @@ struct SettingsView: View {
                     sunAlertOptions(lead: $viewModel.sunriseAlertLeadMinutes,
                                     gate: $viewModel.sunriseAlertGate)
 
+                    // Midsummer sunrises are early enough that a lead time
+                    // alone will wake you in the small hours.
+                    settingToggle("Never before a set time",
+                                  isOn: $viewModel.sunriseEarliestEnabled)
+                    if viewModel.sunriseEarliestEnabled {
+                        HStack {
+                            Text("Not before")
+                                .font(.serif(.subheadline, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                            Spacer()
+                            HazeTimePicker(date: $viewModel.sunriseEarliestTime,
+                                           timeFormat: viewModel.timeFormat)
+                        }
+                    }
+
                     // A heads-up forty-five minutes before sunrise is no use
                     // if you are asleep; this one arrives while there is still
                     // time to set an alarm.
@@ -490,21 +542,125 @@ struct SettingsView: View {
                                 .font(.serif(.subheadline, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.85))
                             Spacer()
-                            DatePicker("Evening heads-up time",
-                                       selection: $viewModel.sunriseEveningTime,
-                                       displayedComponents: .hourAndMinute)
-                                .labelsHidden()
-                                .colorScheme(.dark)
+                            HazeTimePicker(date: $viewModel.sunriseEveningTime,
+                                           timeFormat: viewModel.timeFormat)
                         }
                     }
                 }
 
-                Text("Sun alerts arrive ahead of the event, and only when its rating clears the bar you set. Great skies are rare; that's what makes the alert worth having. The evening heads-up describes the next morning, so there is still time to set an alarm.")
+                Text("Sun alerts arrive ahead of the event, and only when its rating clears the bar you set. Great skies are rare; that's what makes the alert worth having. An alert that would land before your set time is skipped rather than moved, since one arriving after the sunrise it announces is no use. The evening heads-up describes the next morning, so there is still time to set an alarm.")
                     .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
+
+                Divider().overlay(Color.white.opacity(0.12))
+                notificationDiagnostics
             }
         }
+        .task { await refreshNotificationState() }
+    }
+
+    // MARK: - Notification plumbing
+
+    /// Proof the chain works, and a look at what is actually queued. Without
+    /// this every setting above can only be tested by waiting for dawn.
+    private var notificationDiagnostics: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Scheduled")
+                    .font(.serif(.subheadline, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                Button {
+                    Task {
+                        testSent = await NotificationPlanner.sendTest()
+                        await refreshNotificationState()
+                    }
+                } label: {
+                    Text(testSent ? "Sent" : "Send a test")
+                        .font(.serif(.subheadline, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(GlassSurface(shape: Capsule(), frost: 0.08))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.6))
+                }
+                .buttonStyle(.plain)
+                .disabled(notificationsDenied)
+                .opacity(notificationsDenied ? 0.4 : 1)
+            }
+
+            if pendingNotifications.isEmpty {
+                Text("Nothing queued right now.")
+                    .font(.serif(.caption))
+                    .foregroundStyle(.white.opacity(0.55))
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(pendingNotifications, id: \.id) { item in
+                        HStack {
+                            Text(Self.scheduledName(item.id))
+                            Spacer()
+                            Text(Self.scheduledWhen(item.fires))
+                                .foregroundStyle(.white.opacity(0.75))
+                        }
+                        .font(.serif(.caption))
+                        .foregroundStyle(.white.opacity(0.6))
+                    }
+                }
+            }
+        }
+    }
+
+    private var permissionWarning: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "bell.slash")
+                .font(.system(size: 12, weight: .semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Notifications are switched off for Haze in system settings, so nothing below will arrive.")
+                #if os(iOS)
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    Link(destination: url) {
+                        Text("Open Settings")
+                            .font(.serif(.caption, weight: .medium))
+                            .underline()
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                }
+                #endif
+            }
+        }
+        .font(.serif(.caption))
+        .foregroundStyle(.white.opacity(0.8))
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The scheduled ids are internal strings; these are what they mean.
+    private static func scheduledName(_ id: String) -> String {
+        switch id {
+        case "morning-digest": "Morning digest"
+        case "golden-hour": "Golden hour"
+        case "sunset-alert": "Sunset"
+        case "sunrise-alert": "Sunrise"
+        case "sunrise-evening": "Tomorrow's sunrise"
+        case "haze-test": "Test"
+        default: id
+        }
+    }
+
+    /// "7:30 AM" for today, "Tomorrow 7:30 AM" beyond it: almost everything
+    /// queued here fires tomorrow, and a bare time reads as today.
+    private static func scheduledWhen(_ date: Date) -> String {
+        let time = Fmt.time(date, timezone: .current)
+        let cal = Calendar.current
+        if cal.isDateInToday(date) { return time }
+        if cal.isDateInTomorrow(date) { return "Tomorrow \(time)" }
+        return "\(Fmt.weekday(date, timezone: .current)) \(time)"
+    }
+
+    private func refreshNotificationState() async {
+        pendingNotifications = await NotificationPlanner.pending()
+        notificationsDenied = await NotificationPlanner.authorizationStatus() == .denied
     }
 
     /// Lead-time and quality-bar controls, shown while an alert is on. The
@@ -514,7 +670,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             optionRow("Heads-up", value: Self.leadLabel(lead.wrappedValue)) {
                 Picker("Heads-up", selection: lead) {
-                    ForEach([15, 30, 45, 60], id: \.self) { minutes in
+                    ForEach([10, 15, 20, 30, 45, 60, 90, 120], id: \.self) { minutes in
                         Text(Self.leadLabel(minutes)).tag(minutes)
                     }
                 }
@@ -534,7 +690,12 @@ struct SettingsView: View {
     }
 
     private static func leadLabel(_ minutes: Int) -> String {
-        minutes == 60 ? "1 hour before" : "\(minutes) min before"
+        switch minutes {
+        case 60: "1 hour before"
+        case 90: "90 min before"
+        case 120: "2 hours before"
+        default: "\(minutes) min before"
+        }
     }
 
     private func optionRow(_ label: String, value: String,
@@ -634,23 +795,174 @@ struct SettingsView: View {
         return "\(version) (\(build))"
     }
 
+    /// Where the forecast comes from. Google's WeatherNext is opt-in and, unless
+    /// the build ships a key of its own, needs the reader's: the field lives
+    /// here so the choice, the key, and the attribution Google asks for sit
+    /// together. The control and blurb follow the choice; the rows and the
+    /// Google credit describe what is actually feeding the app, so with
+    /// WeatherNext chosen and no key they read Open-Meteo, and the caption
+    /// under the key field says why. When a key is present but Google turned
+    /// the request down, Google's own message sits under the field, so the
+    /// reader fixing the key can see what was objected to.
     private var sourceCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 18) {
                 CardLabel(systemImage: "antenna.radiowaves.left.and.right", title: "Data")
 
-                VStack(spacing: 10) {
-                    sourceRow(label: "Source", value: "Open-Meteo")
-                    Divider().overlay(Color.white.opacity(0.12))
-                    sourceRow(label: "Models", value: "ECMWF · GFS · ICON")
+                // A one-option picker is worse than none, so the control only
+                // appears when there is a real choice to make.
+                if WeatherNextFeature.isEnabled {
+                    unitRow("Forecast source") {
+                        SegmentedChoice(selection: $viewModel.forecastSource,
+                                        options: ForecastSource.selectable.map { ($0.label, $0) })
+                            .sensoryFeedback(.selection, trigger: viewModel.forecastSource)
+                    }
                 }
 
-                Text("Open-Meteo blends leading national forecast models and picks the best fit for each location, with no single-source bias.")
+                VStack(spacing: 10) {
+                    sourceRow(label: "Source", value: viewModel.effectiveSource.sourceName)
+                    Divider().overlay(Color.white.opacity(0.12))
+                    sourceRow(label: "Models", value: viewModel.effectiveSource.modelsName)
+                }
+
+                if WeatherNextFeature.isEnabled,
+                   viewModel.forecastSource == .weatherNext, !WeatherNextKey.isBuiltIn {
+                    weatherNextKeySection
+                } else if let notice = weatherNextNotice {
+                    // With the key built in there is no field to sit under,
+                    // so the reason follows the rows describing the source.
+                    sourceNoticeRow(notice)
+                }
+
+                Text(viewModel.forecastSource.blurb)
                     .font(.serif(.caption))
                     .foregroundStyle(.white.opacity(0.6))
                     .fixedSize(horizontal: false, vertical: true)
+
+                if WeatherNextFeature.isEnabled, viewModel.forecastSource == .weatherNext {
+                    // Google meters the hourly pages against a daily quota,
+                    // and a unit change used to refetch everything; this is
+                    // the reader's warning about the first and reassurance
+                    // about the second.
+                    Text("Hourly forecasts cost the most, ten calls a refresh, because Google serves them a day at a time. Haze reuses Google's last answer for the refresh interval, so changing units or relaunching in that window costs nothing.")
+                        .font(.serif(.caption))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if viewModel.effectiveSource == .weatherNext {
+                    // Google's attribution policy asks for this line, verbatim.
+                    Text("Includes weather data from Google")
+                        .font(.serif(.caption))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+    }
+
+    /// The key field and its guidance, shown while WeatherNext is chosen and
+    /// the build carries no key of its own.
+    private var weatherNextKeySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            weatherNextKeyField
+
+            if let notice = weatherNextNotice {
+                sourceNoticeRow(notice)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("A Google Maps Platform key with the Weather API enabled is required.")
+                if let url = URL(string: "https://developers.google.com/maps/documentation/weather/get-api-key") {
+                    Link(destination: url) {
+                        Text("Get a key")
+                            .font(.serif(.caption, weight: .medium))
+                            .underline()
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+                if weatherNextKeyMissing {
+                    Text("Using Classic Haze until a key is added.")
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+            }
+            .font(.serif(.caption))
+            .foregroundStyle(.white.opacity(0.6))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// `WeatherNextKey` reads UserDefaults, which a view cannot observe, so
+    /// the view model's copy of the key is consulted first: that read is what
+    /// makes the caption follow the typing. `WeatherNextKey` then gives the
+    /// verdict, since it also knows about a key shipped in the Info.plist.
+    private var weatherNextKeyMissing: Bool {
+        viewModel.weatherNextKeyOverride.isEmpty && !WeatherNextKey.isConfigured
+    }
+
+    /// Why the page differs from the WeatherNext choice: a fallback to Classic
+    /// Haze, or hours borrowed from Open-Meteo while Google's quota is spent.
+    /// The service composes the sentence, so it is shown verbatim. Only while
+    /// WeatherNext is still the choice: once the reader switches back, a
+    /// stale reason has nothing left to explain.
+    private var weatherNextNotice: String? {
+        guard WeatherNextFeature.isEnabled,
+              viewModel.forecastSource == .weatherNext else { return nil }
+        return viewModel.bundle?.sourceNotice
+    }
+
+    private func sourceNoticeRow(_ notice: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 12, weight: .semibold))
+            Text(notice)
+                .font(.serif(.caption))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(.white.opacity(0.75))
+    }
+
+    /// The search bar's glass around a plain field. A key is pasted, not
+    /// typed, so the iPhone keyboard's word helpers are switched off.
+    private var weatherNextKeyField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "key")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.55))
+
+            weatherNextKeyTextField
+
+            if !viewModel.weatherNextKeyOverride.isEmpty {
+                Button {
+                    viewModel.weatherNextKeyOverride = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear the key")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(GlassSurface(shape: Capsule(), frost: 0.18, blurRadius: 14))
+    }
+
+    private var weatherNextKeyTextField: some View {
+        let field = TextField("", text: $viewModel.weatherNextKeyOverride,
+                              prompt: Text("Google API key")
+                                .foregroundStyle(.white.opacity(0.45)))
+            .foregroundStyle(.white)
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+        #if canImport(UIKit)
+        return field
+            .textInputAutocapitalization(.never)
+            .keyboardType(.asciiCapable)
+        #else
+        return field
+        #endif
     }
 
     private func sourceRow(label: String, value: String) -> some View {

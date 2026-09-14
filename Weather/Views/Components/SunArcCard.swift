@@ -272,15 +272,29 @@ private struct ArcView: View {
             }
 
             ZStack {
-                // The sun-tone wash under the curve, softly blurred and faded
-                // downward so it melts into the card instead of ending on a hard
-                // straight line at the bottom.
-                // The sun-tone wash under the curve, softly blurred and faded
-                // downward so it melts into the card instead of ending on a hard
-                // straight line at the bottom.
+                // The sun-tone wash under the curve: the day's light read
+                // left to right, as atmosphere rather than as a band.
+                //
+                // Three things had to be right here, and each was wrong on
+                // its own at some point:
+                //
+                //  * Softness comes from the mask, never from the wash.
+                //    Blurring the gradient drags its seven colour stops
+                //    through one another into mud; blurring a white fill of
+                //    the arc region feathers only the boundary and leaves
+                //    every stop where it was drawn.
+                //  * Clipping after a blur is worse than not blurring at
+                //    all — it softens the interior and then puts a hard
+                //    edge straight back along the curve.
+                //  * Opacity matters more than either. `fillShape`'s apex
+                //    sits near the top of the frame and the downward fade
+                //    makes the wash strongest right under the arc, so at
+                //    full strength it reads as a mottled band tracing the
+                //    curve however cleanly its edges are handled. Held
+                //    down to about a third, it reads as air.
                 wash
-                    .blur(radius: 5)
-                    .clipShape(fillShape)
+                    .opacity(0.38)
+                    .mask(fillShape.fill(.white).blur(radius: 14))
                     .mask(
                         LinearGradient(
                             stops: [
