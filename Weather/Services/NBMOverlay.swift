@@ -6,9 +6,9 @@
 //  the ~48 h HRRR window, and GFS runs hot — summer daily highs came in 10 °F+
 //  over the NWS forecast. The NBM (National Blend of Models) is the calibrated
 //  blend the official NWS forecast tracks, so for US locations its temperatures,
-//  humidity, winds and precipitation probabilities are spliced over the
-//  best-match numbers. Everything NBM can't provide (weather codes, UV, layered
-//  cloud cover, pressure, precipitation amounts, the 15-minute nowcast) stays
+//  humidity, winds, precipitation probabilities and precipitation amounts are
+//  spliced over the best-match numbers. Everything NBM can't provide (weather
+//  codes, UV, layered cloud cover, pressure, the 15-minute nowcast) stays
 //  best-match.
 //
 
@@ -29,6 +29,10 @@ nonisolated struct NBMOverlay: Decodable {
         let windDirection: [Double?]?
         let dewPoint: [Double?]?
         let visibility: [Double?]?
+        /// The amount, not just the chance. GFS is what "how much rain" used
+        /// to come from, and it is the same raw model whose daily highs ran
+        /// 10 °F hot; NBM carries a calibrated QPF for the same hours.
+        let precipitation: [Double?]?
 
         enum CodingKeys: String, CodingKey {
             case time
@@ -40,6 +44,7 @@ nonisolated struct NBMOverlay: Decodable {
             case windDirection = "wind_direction_10m"
             case dewPoint = "dew_point_2m"
             case visibility
+            case precipitation
         }
     }
 
@@ -53,6 +58,8 @@ nonisolated struct NBMOverlay: Decodable {
         let windSpeedMax: [Double?]?
         let windGustMax: [Double?]?
         let windDirectionDominant: [Double?]?
+        let precipitationSum: [Double?]?
+        let snowfallSum: [Double?]?
 
         enum CodingKeys: String, CodingKey {
             case time
@@ -64,6 +71,8 @@ nonisolated struct NBMOverlay: Decodable {
             case windSpeedMax = "wind_speed_10m_max"
             case windGustMax = "wind_gusts_10m_max"
             case windDirectionDominant = "wind_direction_10m_dominant"
+            case precipitationSum = "precipitation_sum"
+            case snowfallSum = "snowfall_sum"
         }
     }
 
@@ -97,13 +106,14 @@ nonisolated struct NBMOverlay: Decodable {
             .init(name: "models", value: "ncep_nbm_conus"),
             .init(name: "hourly", value: [
                 "temperature_2m", "relative_humidity_2m", "apparent_temperature",
-                "precipitation_probability", "wind_speed_10m",
+                "precipitation_probability", "precipitation", "wind_speed_10m",
                 "wind_direction_10m", "dew_point_2m", "visibility"
             ].joined(separator: ",")),
             .init(name: "daily", value: [
                 "temperature_2m_max", "temperature_2m_min",
                 "apparent_temperature_max", "apparent_temperature_min",
-                "precipitation_probability_max", "wind_speed_10m_max",
+                "precipitation_probability_max", "precipitation_sum",
+                "snowfall_sum", "wind_speed_10m_max",
                 "wind_gusts_10m_max", "wind_direction_10m_dominant"
             ].joined(separator: ",")),
             .init(name: "past_days", value: "1"),
@@ -135,6 +145,7 @@ extension ForecastResponse {
         mergeHourly(&hourly.humidity, nbm.hourly.humidity)
         mergeHourly(&hourly.apparentTemperature, nbm.hourly.apparentTemperature)
         mergeHourly(&hourly.precipitationProbability, nbm.hourly.precipitationProbability)
+        mergeHourly(&hourly.precipitation, nbm.hourly.precipitation)
         mergeHourly(&hourly.windSpeed, nbm.hourly.windSpeed)
         mergeHourly(&hourly.windDirection, nbm.hourly.windDirection)
         if var dewPoint = hourly.dewPoint {
@@ -155,6 +166,11 @@ extension ForecastResponse {
         mergeDaily(&daily.apparentMax, nbm.daily.apparentMax)
         mergeDaily(&daily.apparentMin, nbm.daily.apparentMin)
         mergeDaily(&daily.precipitationProbabilityMax, nbm.daily.precipitationProbabilityMax)
+        mergeDaily(&daily.precipitationSum, nbm.daily.precipitationSum)
+        if var snowfallSum = daily.snowfallSum {
+            mergeDaily(&snowfallSum, nbm.daily.snowfallSum)
+            daily.snowfallSum = snowfallSum
+        }
         mergeDaily(&daily.windSpeedMax, nbm.daily.windSpeedMax)
         mergeDaily(&daily.windGustMax, nbm.daily.windGustMax)
         mergeDaily(&daily.windDirectionDominant, nbm.daily.windDirectionDominant)

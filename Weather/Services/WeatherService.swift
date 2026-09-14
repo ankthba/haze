@@ -3,21 +3,31 @@
 //  Weather
 //
 //  Fetches forecast + air quality from Open-Meteo and maps the wire format
-//  (parallel arrays) into the app's domain models.
+//  (parallel arrays) into the app's domain models. When the user has chosen
+//  Google WeatherNext, the forecast itself comes from WeatherNextService
+//  (already shaped as a ForecastResponse) and only the mapping runs here.
 //
 
+import CoreLocation
 import Foundation
 
 nonisolated enum WeatherError: LocalizedError {
     case badURL
     case requestFailed
     case decodingFailed
+    /// Anything that went wrong on the WeatherNext path: no key, a non-2xx
+    /// answer, a transport error, an undecodable body. The reason is a full
+    /// sentence built by `WeatherNextService.failureReason`, carrying what
+    /// Google actually said (its JSON error body) so the user and the log see
+    /// the cause, not a generic "couldn't reach".
+    case weatherNextFailed(reason: String)
 
     var errorDescription: String? {
         switch self {
         case .badURL: return "Couldn't build the request."
         case .requestFailed: return "Couldn't reach the weather service."
         case .decodingFailed: return "Received an unexpected response."
+        case .weatherNextFailed(let reason): return reason
         }
     }
 }
@@ -38,10 +48,100 @@ nonisolated struct WeatherService {
     /// service and a three-request chain respectively, and waiting on them used
     /// to hold the whole forecast off the screen. `fetchExtras` collects them
     /// afterwards and they're folded into the bundle when they land.
+    ///
+    /// `weatherNextMaxAge` is how old a stored Google snapshot may be and still
+    /// be re-adapted instead of refetched (see WeatherNextRawCache). Unit
+    /// changes and relaunches inside the refresh window then cost Google
+    /// nothing, which matters because every hourly page counts against a
+    /// per-day quota; 0 means the user asked for fresh numbers.
     func fetchForecast(for place: Place,
                        temperatureUnit: TemperatureUnit,
                        speedUnit: SpeedUnit,
-                       precipUnit: PrecipUnit = .auto) async throws -> WeatherBundle {
+                       precipUnit: PrecipUnit = .auto,
+                       source: ForecastSource = .classic,
+                       weatherNextMaxAge: TimeInterval = 15 * 60) async throws -> WeatherBundle {
+        guard source == .weatherNext else {
+            return try await fetchClassicForecast(place: place,
+                                                  temperatureUnit: temperatureUnit,
+                                                  speedUnit: speedUnit,
+                                                  precipUnit: precipUnit)
+        }
+        do {
+            // No NBM here: WeatherNext is already a calibrated blend, and
+            // splicing NBM's numbers over it would mix two models into one
+            // reading. The extras (air quality, station observation, alerts)
+            // still arrive through fetchExtras regardless of source.
+            let outcome = try await WeatherNextService(session: session)
+                .fetchForecastResponse(place: place,
+                                       temperatureUnit: temperatureUnit,
+                                       speedUnit: speedUnit,
+                                       precipUnit: precipUnit,
+                                       maxAge: weatherNextMaxAge)
+            // One Open-Meteo request follows, for what Google cannot supply
+            // (the 15-minute nowcast, a pre-today daily row, the cloud layers,
+            // elevation) and, since the hourly quota can run out on its own,
+            // for any hour Google did not send: the fill appends those rows,
+            // so a WeatherNext page with no hours from Google still has an
+            // hourly strip. It never overwrites a Google value. It waits for
+            // Google rather than riding alongside so a load that throws (and
+            // falls back to another Open-Meteo request below) or is served
+            // from the snapshot (whose fill is stored beside it) sends none;
+            // Open-Meteo's rate limit has taken the whole app down before.
+            // See OpenMeteoGapFill.swift.
+            let fill = await OpenMeteoGapFill.load(place: place,
+                                                   temperatureUnit: temperatureUnit,
+                                                   speedUnit: speedUnit,
+                                                   precipUnit: precipUnit,
+                                                   maxAge: weatherNextMaxAge,
+                                                   session: session)
+            var raw = outcome.response
+            if let fill { raw.applyGapFill(fill, timezone: outcome.timezone) }
+            // Stamped with Google's answer time, not now: a page re-adapted
+            // from the snapshot is as old as the snapshot, and the footer's
+            // "Updated" line and the sidebar's freshness gate read this.
+            var bundle = try transform(raw: raw, place: place, timezone: outcome.timezone,
+                                       airQuality: nil, observedCode: nil,
+                                       fetchedAt: outcome.fetchedAt)
+            // Current and daily are Google's whenever this path returns, so
+            // the attribution stays WeatherNext even when the hours were
+            // borrowed; the notice (nil when nothing was borrowed) is what
+            // tells the reader about the substitution, and it is composed
+            // knowing whether the fill actually landed, so a page with no
+            // hourly series never claims Open-Meteo supplied one.
+            bundle.source = .weatherNext
+            bundle.sourceNotice = WeatherNextService.Outcome.notice(
+                googleHours: outcome.googleHours,
+                hoursFailure: outcome.hoursFailure,
+                fillApplied: fill != nil)
+            return bundle
+        } catch {
+            // The source toggle must never take the forecast away. A rejected
+            // key, a project without the API enabled, a Google outage: none of
+            // these is a reason to show an error screen when Open-Meteo is a
+            // request away. The page falls back to Classic Haze inside this
+            // same load and carries Google's reason as `sourceNotice`, so the
+            // attribution stays honest and Settings can say why. If Open-Meteo
+            // fails too, that is the error worth showing.
+            var bundle = try await fetchClassicForecast(place: place,
+                                                        temperatureUnit: temperatureUnit,
+                                                        speedUnit: speedUnit,
+                                                        precipUnit: precipUnit)
+            // The notice is printed verbatim by the views, so it has to say
+            // both what happened and why, in that order.
+            let reason = (error as? LocalizedError)?.errorDescription
+                ?? "Google WeatherNext could not be loaded."
+            bundle.sourceNotice = "Google WeatherNext is unavailable, so this is Classic Haze. \(reason)"
+            return bundle
+        }
+    }
+
+    /// The Open-Meteo forecast with the NBM overlay: the classic path, and the
+    /// safety net under WeatherNext. Shared so a fallback bundle is built the
+    /// same way as one the user asked for.
+    private func fetchClassicForecast(place: Place,
+                                      temperatureUnit: TemperatureUnit,
+                                      speedUnit: SpeedUnit,
+                                      precipUnit: PrecipUnit) async throws -> WeatherBundle {
         // The NBM overlay rides alongside the main request and splices in the
         // numbers the calibrated blend does better (see NBMOverlay.swift);
         // outside its US coverage, or on any failure, nothing changes.
@@ -56,29 +156,44 @@ nonisolated struct WeatherService {
                                                             precipUnit: precipUnit)
         var raw = fetched
         if let nbm = await overlay { raw.applyNBM(nbm) }
-        return try transform(raw: raw, place: place, timezone: tz,
-                             airQuality: nil, observedCode: nil)
+        // After the overlay, so NBM's feet are converted with the rest.
+        raw.normaliseVisibility(precipAPI: precipUnit.apiValue(temperatureUnit: temperatureUnit))
+        var bundle = try transform(raw: raw, place: place, timezone: tz,
+                                   airQuality: nil, observedCode: nil)
+        bundle.source = .classic
+        return bundle
     }
 
     struct Extras {
         let airQuality: AirQuality?
-        /// A real station observation (US): forecast models routinely miss a
-        /// storm that's overhead *right now*, so an observed active-weather
-        /// condition overrides the modeled current code.
+        /// The nearest station's live report (US). Models routinely miss a
+        /// storm that's overhead *right now*, and their "current" hour is an
+        /// analysis rather than a measurement, so the instrument wins for
+        /// everything it actually measures. See StationObservation.swift.
+        let observation: StationObservation?
+        /// The observed condition, but only for *active* weather worth
+        /// overriding the model's code for: a ceilometer judges "cloudy"
+        /// from one column of sky, the model judges it from the whole area.
         let observedCode: Int?
         /// Active NWS advisories (US); nil when the fetch failed, empty when
         /// it succeeded and there are none — the difference matters, because
         /// an empty answer should clear a banner and a failure should not.
         let alerts: [WeatherAlert]?
-        var isEmpty: Bool { airQuality == nil && observedCode == nil && alerts == nil }
+        var isEmpty: Bool {
+            airQuality == nil && observation == nil && observedCode == nil && alerts == nil
+        }
     }
 
     func fetchExtras(for place: Place) async -> Extras {
         async let air = try? fetchAirQuality(place: place)
-        async let observed = fetchObservedCode(place: place)
+        async let observed = fetchObservation(place: place)
         async let alerts = fetchAlerts(place: place)
+        let observation = await observed
         return Extras(airQuality: await air ?? nil,
-                      observedCode: await observed,
+                      observation: observation,
+                      observedCode: observation.flatMap {
+                          Self.activeCode(fromObservation: $0.textDescription ?? "")
+                      },
                       alerts: await alerts)
     }
 
@@ -164,9 +279,24 @@ nonisolated struct WeatherService {
     }
 
     /// A deliberately tiny request: current temperature + condition only, used
-    /// to show the device location's weather while browsing another place.
+    /// to show the device location's weather while browsing another place and
+    /// beside each place in the Mac sidebar. It follows the forecast source so
+    /// those numbers agree with the page they sit next to. On WeatherNext,
+    /// `maxAge` lets a stored snapshot's current conditions answer instead of
+    /// a call, the same way the full forecast does.
     func fetchCurrentSummary(for place: Place,
-                             temperatureUnit: TemperatureUnit) async throws -> CurrentSummary {
+                             temperatureUnit: TemperatureUnit,
+                             source: ForecastSource = .classic,
+                             maxAge: TimeInterval = 15 * 60) async throws -> CurrentSummary {
+        if source == .weatherNext {
+            // Same safety net as fetchForecast: a WeatherNext failure falls
+            // through to Open-Meteo rather than blanking the sidebar number.
+            // No notice here; the page it sits beside already carries one.
+            if let current = try? await WeatherNextService(session: session)
+                .fetchCurrentSummary(place: place, temperatureUnit: temperatureUnit, maxAge: maxAge) {
+                return CurrentSummary(temperature: current.temperature, code: current.code, isDay: current.isDay)
+            }
+        }
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
         components?.queryItems = [
             .init(name: "latitude", value: String(place.latitude)),
@@ -195,65 +325,117 @@ nonisolated struct WeatherService {
 
     // MARK: - Station observations (NWS, US only)
 
-    /// Caches each location's nearest-station observations URL so repeat loads
-    /// cost one request instead of three.
+    /// One station, already measured against the place that asked for it.
+    struct CachedStation {
+        let url: String
+        let id: String
+        let name: String
+        let distance: CLLocationDistance
+    }
+
+    /// Caches each location's sorted station list so repeat loads cost one
+    /// request instead of three. The nearest stations to a point don't move.
     private actor StationCache {
-        private var map: [String: String] = [:]
-        func url(for key: String) -> String? { map[key] }
-        func set(_ url: String, for key: String) { map[key] = url }
+        private var map: [String: [CachedStation]] = [:]
+        func stations(for key: String) -> [CachedStation]? { map[key] }
+        func set(_ stations: [CachedStation], for key: String) { map[key] = stations }
     }
     private static let stationCache = StationCache()
+    /// How far down the list to walk before giving up. Enough to survive a
+    /// station or two being offline, few enough to stay cheap.
+    private static let maxStationsTried = 4
 
-    /// The latest real observation near the place, mapped to a WMO-style code.
-    /// Returns nil outside the US, on any failure, when the report is stale,
-    /// or when it shows nothing *active* (clear/cloudy states stay with the
-    /// model, which judges cloud cover better than a single station).
-    private func fetchObservedCode(place: Place) async -> Int? {
+    /// The nearest usable station's live report. Nil outside the US, on any
+    /// failure, when every nearby station is stale or too far, or when the
+    /// station reports nothing we can trust.
+    ///
+    /// Three requests on a cold cache (gridpoint, station list, observation),
+    /// one afterwards: the station list is cached per location, since the
+    /// nearest station to you does not change.
+    func fetchObservation(place: Place) async -> StationObservation? {
         let cc = place.countryCode?.uppercased()
         guard cc == nil || cc == "US" else { return nil }
 
+        let here = CLLocation(latitude: place.latitude, longitude: place.longitude)
         let key = String(format: "%.2f,%.2f", place.latitude, place.longitude)
-        var obsURLString = await Self.stationCache.url(for: key)
 
-        if obsURLString == nil {
+        var candidates = await Self.stationCache.stations(for: key)
+        if candidates == nil {
             struct Points: Decodable {
                 struct Props: Decodable { let observationStations: String }
                 let properties: Props
-            }
-            struct Stations: Decodable {
-                struct Feature: Decodable { let id: String }
-                let features: [Feature]
             }
             guard let pointsURL = URL(string:
                     "https://api.weather.gov/points/\(place.latitude),\(place.longitude)"),
                   let points: Points = await getNWS(pointsURL),
                   let stationsURL = URL(string: points.properties.observationStations),
-                  let stations: Stations = await getNWS(stationsURL),
-                  let station = stations.features.first
+                  let stations: NWSStationsResponse = await getNWS(stationsURL)
             else { return nil }
-            obsURLString = station.id + "/observations/latest"
-            await Self.stationCache.set(obsURLString!, for: key)
-        }
 
-        struct Observation: Decodable {
-            struct Props: Decodable {
-                let timestamp: String
-                let textDescription: String?
-            }
-            let properties: Props
-        }
-        guard let obsURL = URL(string: obsURLString!),
-              let observation: Observation = await getNWS(obsURL)
-        else { return nil }
+            // Sorted by true distance, not by the order the NWS happened to
+            // return: the list is only roughly proximity-ordered, and taking
+            // `features.first` on faith is how a station across the state
+            // ends up supplying "your" current conditions.
+            let sorted = stations.features.compactMap { feature -> CachedStation? in
+                guard let coordinate = feature.coordinate else { return nil }
+                let distance = here.distance(from: CLLocation(latitude: coordinate.latitude,
+                                                              longitude: coordinate.longitude))
+                guard distance <= StationObservation.maxDistance else { return nil }
+                return CachedStation(
+                    url: feature.id + "/observations/latest",
+                    id: feature.properties.stationIdentifier
+                        ?? String(feature.id.split(separator: "/").last ?? "Station"),
+                    name: feature.properties.name ?? "",
+                    distance: distance)
+            }.sorted { $0.distance < $1.distance }
 
-        // Ignore stale reports; stations file extra reports during storms, so
-        // active weather is almost always fresh.
+            await Self.stationCache.set(sorted, for: key)
+            candidates = sorted
+        }
+        guard let candidates, !candidates.isEmpty else { return nil }
+
+        // Walk outwards until one answers with something fresh. Stations go
+        // offline for maintenance all the time, and the old code gave up on
+        // the first one rather than asking the next.
         let iso = ISO8601DateFormatter()
-        guard let stamp = iso.date(from: observation.properties.timestamp),
-              Date().timeIntervalSince(stamp) < 90 * 60
-        else { return nil }
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoPlain = ISO8601DateFormatter()
 
-        return Self.activeCode(fromObservation: observation.properties.textDescription ?? "")
+        for station in candidates.prefix(Self.maxStationsTried) {
+            guard let url = URL(string: station.url),
+                  let response: NWSObservationResponse = await getNWS(url)
+            else { continue }
+            let p = response.properties
+            guard let stamp = iso.date(from: p.timestamp) ?? isoPlain.date(from: p.timestamp),
+                  Date().timeIntervalSince(stamp) < StationObservation.maxAge
+            else { continue }
+
+            let observation = StationObservation(
+                stationID: station.id,
+                stationName: station.name,
+                distanceMeters: station.distance,
+                observedAt: stamp,
+                temperatureC: p.temperature?.trusted,
+                apparentC: p.heatIndex?.trusted ?? p.windChill?.trusted,
+                dewPointC: p.dewpoint?.trusted,
+                humidityPercent: p.relativeHumidity?.trusted,
+                windSpeedKPH: p.windSpeed?.asKPH,
+                windGustKPH: p.windGust?.asKPH,
+                windDirectionDegrees: p.windDirection?.trusted,
+                // Sea level only: `barometricPressure` is the station's own
+                // uncorrected reading and does not mean what the app's
+                // pressure row says it means.
+                pressurePa: p.seaLevelPressure?.trusted,
+                visibilityMeters: p.visibility?.asMetres,
+                textDescription: p.textDescription)
+
+            // A report with no temperature and no condition text is not worth
+            // showing as an observation; try the next station instead.
+            guard observation.temperatureC != nil || observation.textDescription?.isEmpty == false
+            else { continue }
+            return observation
+        }
+        return nil
     }
 
     // MARK: - Active alerts (NWS, US only)
@@ -370,11 +552,14 @@ nonisolated struct WeatherService {
 
     // MARK: - Transform
 
+    /// `fetchedAt` is now for a fresh answer; the WeatherNext path passes its
+    /// snapshot's clock so a re-adapted page is not stamped as new.
     private func transform(raw: ForecastResponse,
                            place: Place,
                            timezone: TimeZone,
                            airQuality: AirQuality?,
-                           observedCode: Int? = nil) throws -> WeatherBundle {
+                           observedCode: Int? = nil,
+                           fetchedAt: Date = Date()) throws -> WeatherBundle {
         let parser = LocalTimeParser(timezone: timezone)
 
         // Current
@@ -400,11 +585,11 @@ nonisolated struct WeatherService {
         let elevation = raw.elevation ?? 0
         let h = raw.hourly
         func uvIndex(at date: Date, hour: Int?) -> Double {
-            UVIndex.value(at: date, latitude: place.latitude, longitude: place.longitude,
-                          elevation: elevation,
-                          cloudLow: hour.flatMap { h.cloudCoverLow?[safe: $0] },
-                          cloudMid: hour.flatMap { h.cloudCoverMid?[safe: $0] },
-                          cloudHigh: hour.flatMap { h.cloudCoverHigh?[safe: $0] })
+            let clouds: (low: Double?, mid: Double?, high: Double?) =
+                hour.map { Self.uvClouds(in: h, at: $0) } ?? (nil, nil, nil)
+            return UVIndex.value(at: date, latitude: place.latitude, longitude: place.longitude,
+                                 elevation: elevation,
+                                 cloudLow: clouds.low, cloudMid: clouds.mid, cloudHigh: clouds.high)
         }
         let currentUV = uvIndex(at: currentDate, hour: nearestHourIndex)
         // Dew point and visibility have no "current" variable; the nearest
@@ -473,9 +658,9 @@ nonisolated struct WeatherService {
                 humidity: h.humidity[safe: i] ?? 0,
                 uvIndex: uv
             )
-            point.cloudCoverLow = h.cloudCoverLow?[safe: i]
-            point.cloudCoverMid = h.cloudCoverMid?[safe: i]
-            point.cloudCoverHigh = h.cloudCoverHigh?[safe: i]
+            point.cloudCoverLow = h.cloudCoverLow?[safe: i] ?? nil
+            point.cloudCoverMid = h.cloudCoverMid?[safe: i] ?? nil
+            point.cloudCoverHigh = h.cloudCoverHigh?[safe: i] ?? nil
             point.visibility = h.visibility?[safe: i]
             hours.append(point)
         }
@@ -535,11 +720,48 @@ nonisolated struct WeatherService {
             hourly: hours,
             daily: days,
             airQuality: airQuality,
-            fetchedAt: Date()
+            fetchedAt: fetchedAt
         )
         bundle.minutely = minutely
         bundle.yesterday = yesterday
         return bundle
+    }
+}
+
+// MARK: - Visibility unit
+
+extension ForecastResponse {
+    /// Open-Meteo (and NBM with it) switches hourly visibility to feet
+    /// whenever the precipitation unit is "inch", and nothing in the payload
+    /// says so; Fmt.visibility and SunQuality read metres. The classic path
+    /// calls this after the overlay so every bundle carries metres whatever
+    /// the source (the WeatherNext adapter and the gap fill already do).
+    nonisolated mutating func normaliseVisibility(precipAPI: String) {
+        guard precipAPI == "inch", let feet = hourly.visibility else { return }
+        hourly.visibility = feet.map { $0 * 0.3048 }
+    }
+}
+
+// MARK: - UV cloud input
+
+extension WeatherService {
+    /// The cloud layers the UV model reads for one forecast hour. UVIndex
+    /// counts a missing layer as clear, which is right on the classic path
+    /// (Open-Meteo always sends the layers) and wrong under WeatherNext
+    /// whenever the gap fill could not supply them: a failed or rate-limited
+    /// Open-Meteo call, an hour no fill hour lined up with, or a sky
+    /// Open-Meteo did not see. Google's total cover is known for that hour
+    /// regardless, so when every layer is unknown the total stands in as one
+    /// opaque deck rather than letting an overcast hour read as clear-sky UV.
+    nonisolated static func uvClouds(in hourly: ForecastResponse.Hourly,
+                                     at index: Int) -> (low: Double?, mid: Double?, high: Double?) {
+        let low = hourly.cloudCoverLow?[safe: index] ?? nil
+        let mid = hourly.cloudCoverMid?[safe: index] ?? nil
+        let high = hourly.cloudCoverHigh?[safe: index] ?? nil
+        if low == nil, mid == nil, high == nil {
+            return (hourly.cloudCover?[safe: index], nil, nil)
+        }
+        return (low, mid, high)
     }
 }
 
