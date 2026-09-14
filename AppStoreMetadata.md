@@ -1,6 +1,6 @@
 # Haze: App Store Connect metadata
 
-Paste these into App Store Connect → your app → the **2.0** version page.
+Paste these into App Store Connect → your app → the **2.1** version page.
 
 ## Name (max 30)
 Haze
@@ -38,7 +38,24 @@ Haze is built to be quiet and beautiful. Weather you actually enjoy looking at.
 
 Weather data by Open-Meteo.
 
-## What's New (release notes for 2.0)
+## What's New (release notes for 2.1)
+Accuracy, sharpened.
+
+Live conditions from a real weather station. In the US, the temperature, wind, humidity, pressure and dew point on the front page now come from the nearest reporting station rather than a forecast model, and the page tells you which station it used and how far away it is. A model knows what the afternoon should look like; an instrument knows what is happening outside right now.
+
+The reading always matches the hour. The big number and the hourly strip could drift apart on a page that had been open or cached for a while, sometimes by a lot on a hot afternoon. They now move together, always.
+
+Your location stays your location. A single missed GPS fix could quietly move the app to another saved city and keep it there. It now retries, and comes home on its own.
+
+Rain, better measured. Precipitation amounts and snow totals in the US now follow the National Blend of Models, the calibrated guidance behind the official forecast, as the chances already did.
+
+Notifications worth keeping on. The golden hour heads-up now reads the sky at golden hour instead of the sky right now, sunrise alerts can be told never to arrive before a set time, and Settings shows exactly what is scheduled, with a button to send a test.
+
+A clearer 72-hour trend. Days are separated and named, so three days of weather no longer read as one long wave.
+
+Settings, rethought. Grouped by what each setting actually governs, and wearing the app's own controls on iPhone rather than the system's.
+
+## What's New (release notes for 2.0, shipped)
 Haze 2.0 is a new app from top to bottom.
 
 A full redesign. Every screen speaks in one editorial voice: garamond serifs, big numerals, hairline rules, glass, and room to breathe. In light and dark, day and night.
