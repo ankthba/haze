@@ -51,7 +51,11 @@ enum RainAlertsService {
     /// Asks for notification permission; reports whether it was granted.
     static func requestPermission() async -> Bool {
         let center = UNUserNotificationCenter.current()
-        let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
+        // `.timeSensitive` has to be asked for here: without it the system
+        // silently demotes every time-sensitive interruption level back to
+        // ordinary, and a rain warning waits behind a Focus.
+        let granted = (try? await center.requestAuthorization(
+            options: [.alert, .sound, .badge, .timeSensitive])) ?? false
         return granted
     }
 
@@ -105,11 +109,23 @@ enum RainAlertsService {
         // Rebuild the scheduled digest / golden-hour from the freshest cached
         // forecast, so an overnight background run keeps tomorrow's digest
         // current. (Raw-string unit keys mirror WeatherViewModel's storage.)
+        // The source follows the view model's effectiveSource rule: WeatherNext
+        // only counts once a key exists, otherwise the cache holds Open-Meteo.
         let d = UserDefaults.standard
+        let chosen = ForecastSource(rawValue: d.string(forKey: WeatherViewModel.forecastSourceKey) ?? "")
+            ?? .classic
         let units = WeatherCache.Units(
             temperature: TemperatureUnit(rawValue: d.string(forKey: "temp_unit") ?? "") ?? .fahrenheit,
             speed: SpeedUnit(rawValue: d.string(forKey: "speed_unit") ?? "") ?? .mph,
-            precip: PrecipUnit(rawValue: d.string(forKey: "precip_unit") ?? "") ?? .auto)
+            precip: PrecipUnit(rawValue: d.string(forKey: "precip_unit") ?? "") ?? .auto,
+            source: .effective(for: chosen))
+        // A background launch never constructs the view model, so the shared
+        // formatter settings are still at their process defaults. Only the
+        // temperature unit currently feeds a calculation (the dew point
+        // recomputed when a stale reading is advanced to the hour), and
+        // nothing on this path reads it today — but the next thing that does
+        // should not have to discover that.
+        Fmt.temperatureUnit = units.temperature
         if let cached = await WeatherCache.shared.bundle(for: place, units: units) {
             NotificationPlanner.refresh(bundle: cached,
                                         usesFahrenheit: units.temperature == .fahrenheit)
@@ -134,12 +150,14 @@ enum RainAlertsService {
         let timezone = place.timezone.flatMap(TimeZone.init(identifier:)) ?? .current
         let voice = Voice.current
         let at = Fmt.time(start, timezone: timezone)
-        let content = UNMutableNotificationContent()
-        content.title = voice.pick("Rain on the way", whimsy: "Rain's about to turn up")
-        content.body = voice.pick(
-            "Starting around \(at) near \(place.name).",
-            whimsy: "It arrives around \(at) near \(place.name), so take an umbrella.")
-        content.sound = .default
+        let content = NotificationPlanner.content(
+            title: voice.pick("Rain on the way", whimsy: "Rain's about to turn up"),
+            body: voice.pick(
+                "Starting around \(at) near \(place.name).",
+                whimsy: "It arrives around \(at) near \(place.name), so take an umbrella."),
+            thread: .rain,
+            timeSensitive: true,
+            relevance: 0.8)
         try? await UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "rain-\(Int(start.timeIntervalSince1970))",
                                   content: content, trigger: nil))
@@ -173,13 +191,14 @@ enum RainAlertsService {
 
         // Advisories are the one place the whimsical voice never reaches: a
         // severe-weather headline is not the place for a softer register.
-        let content = UNMutableNotificationContent()
-        content.title = fresh.event
-        content.body = fresh.headline ?? "Active advisory for \(place.name). Open Haze for details."
         // Critical sound needs an Apple-approved entitlement we don't have, so
         // it would be silently downgraded. Time-sensitive is the honest tier.
-        content.sound = .default
-        if fresh.isUrgent { content.interruptionLevel = .timeSensitive }
+        let content = NotificationPlanner.content(
+            title: fresh.event,
+            body: fresh.headline ?? "Active advisory for \(place.name). Open Haze for details.",
+            thread: .advisory,
+            timeSensitive: fresh.isUrgent,
+            relevance: fresh.isUrgent ? 1.0 : 0.75)
         try? await UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: "alert-\(fresh.id)",
                                   content: content, trigger: nil))
