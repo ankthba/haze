@@ -43,6 +43,11 @@ nonisolated enum PressureUnit: String, CaseIterable {
 enum Fmt {
     /// Set from Settings (persisted by the view model); formatters consult them.
     static var timeFormat: TimeFormat = .system
+    /// Set alongside the others from the view model. Read by the few
+    /// calculations whose coefficients are unit-specific (the dew point
+    /// recomputed when a stale reading is advanced to the current hour).
+    static var temperatureUnit: TemperatureUnit = .fahrenheit
+    static var temperatureUnitIsFahrenheit: Bool { temperatureUnit == .fahrenheit }
     static var precipUnit: PrecipUnit = .auto
     static var pressureUnit: PressureUnit = .hPa
 
